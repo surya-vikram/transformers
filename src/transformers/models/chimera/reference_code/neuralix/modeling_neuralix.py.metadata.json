@@ -1,0 +1,5 @@
+{
+  "artifactType":  "ARTIFACT_TYPE_OTHER",
+  "summary":  "Created `modeling_neuralix.py` utilizing modular inheritance. It successfully imports Llama's GQA attention block and DeepSeek's target-constrained MoE block, combining them into the custom Neuralix architecture with logit softcapping.",
+  "updatedAt":  "2026-06-17T02:10:37.143319200Z"
+}

@@ -1,0 +1,5 @@
+{
+  "artifactType":  "ARTIFACT_TYPE_OTHER",
+  "summary":  "Created `configuration_neuralix.py` to define the custom Hugging Face configuration for the Neuralix-10B architecture.",
+  "updatedAt":  "2026-06-17T02:04:22.508864300Z"
+}

@@ -1,0 +1,75 @@
+{
+  "XiaomiMiMo/MiMo-V2.5-Pro": [
+    "config.json",
+    "configuration_mimo_v2.py",
+    "modeling_mimo_v2.py"
+  ],
+  "XiaomiMiMo/MiMo-V2-Flash": [
+    "config.json",
+    "configuration_mimo_v2_flash.py",
+    "modeling_mimo_v2_flash.py"
+  ],
+  "Qwen/Qwen3.6-35B-A3B": [
+    "config.json",
+    "generation_config.json"
+  ],
+  "Qwen/Qwen3.6-27B": [
+    "config.json",
+    "generation_config.json"
+  ],
+  "google/gemma-4-31b-it": [
+    "config.json",
+    "generation_config.json"
+  ],
+  "google/gemma-4-26b-a4b-it": [
+    "config.json",
+    "generation_config.json"
+  ],
+  "google/gemma-4-12B-it": [
+    "config.json",
+    "generation_config.json"
+  ],
+  "deepseek-ai/DeepSeek-V4-Pro": [
+    "config.json",
+    "encoding/encoding_dsv4.py",
+    "encoding/test_encoding_dsv4.py",
+    "generation_config.json",
+    "inference/convert.py",
+    "inference/generate.py",
+    "inference/kernel.py",
+    "inference/model.py"
+  ],
+  "deepseek-ai/DeepSeek-V4-Flash": [
+    "config.json",
+    "encoding/encoding_dsv4.py",
+    "encoding/test_encoding_dsv4.py",
+    "generation_config.json",
+    "inference/convert.py",
+    "inference/generate.py",
+    "inference/kernel.py",
+    "inference/model.py"
+  ],
+  "moonshotai/Kimi-K2.6": [
+    "config.json",
+    "configuration_deepseek.py",
+    "configuration_kimi_k25.py",
+    "generation_config.json",
+    "kimi_k25_processor.py",
+    "kimi_k25_vision_processing.py",
+    "media_utils.py",
+    "modeling_deepseek.py",
+    "modeling_kimi_k25.py",
+    "tokenization_kimi.py",
+    "tool_declaration_ts.py"
+  ],
+  "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16": [
+    "__init__.py",
+    "config.json",
+    "generation_config.json",
+    "ultra_v3_reasoning_parser.py"
+  ],
+  "openai/gpt-oss-20b": [
+    "config.json",
+    "generation_config.json"
+  ]
+}

@@ -1,0 +1,57 @@
+=============================================================
+       3B-Class Open-Source Model Benchmark Analysis         
+=============================================================
+                 Model  Params (B)  MMLU  GSM8K  ARC-Challenge  HumanEval  Aggregate Score
+0          Qwen 2.5 3B        3.09  68.4   80.2           82.0       84.1           78.675
+1  Phi-3.5-mini (3.8B)        3.82  78.5   86.2           84.6       62.8           78.025
+2         Llama 3.2 3B        3.21  63.4   77.7           78.6       48.2           66.975
+3         Gemma 2 2.6B        2.61  70.9   63.1           81.2       42.1           64.325
+4          StableLM 3B        2.79  45.2   12.3           48.6       15.2           30.325
+
+Architectural Details of Top Performers:
+-------------------------------------------------------------
+1. Qwen 2.5 3B (Avg Score: 78.68%)
+   - Parameters: 3.09B
+   - Layers/Depth: 36 layers
+   - Hidden Size / FFN Ratio: 2048 / 5.37x
+   - Attention: MHA
+   - Vocab Size: 151643
+   - Tied Embeddings: True
+
+2. Phi-3.5-mini (3.8B) (Avg Score: 78.02%)
+   - Parameters: 3.82B
+   - Layers/Depth: 32 layers
+   - Hidden Size / FFN Ratio: 3072 / 2.67x
+   - Attention: GQA
+   - Vocab Size: 32064
+   - Tied Embeddings: True
+
+3. Llama 3.2 3B (Avg Score: 66.97%)
+   - Parameters: 3.21B
+   - Layers/Depth: 28 layers
+   - Hidden Size / FFN Ratio: 3072 / 2.67x
+   - Attention: GQA
+   - Vocab Size: 128256
+   - Tied Embeddings: True
+
+4. Gemma 2 2.6B (Avg Score: 64.33%)
+   - Parameters: 2.61B
+   - Layers/Depth: 26 layers
+   - Hidden Size / FFN Ratio: 2304 / 4.0x
+   - Attention: GQA
+   - Vocab Size: 256000
+   - Tied Embeddings: True
+
+5. StableLM 3B (Avg Score: 30.32%)
+   - Parameters: 2.79B
+   - Layers/Depth: 32 layers
+   - Hidden Size / FFN Ratio: 2560 / 2.7x
+   - Attention: MHA
+   - Vocab Size: 50257
+   - Tied Embeddings: False
+
+Correlation of Architectural Factors with Aggregate Score:
+-------------------------------------------------------------
+   - Depth (Layers): 0.139
+   - FFN Expansion Ratio: 0.427
+   - Params (B): 0.560
