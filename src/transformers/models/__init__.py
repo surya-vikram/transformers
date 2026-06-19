@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from .camembert import *
     from .canine import *
     from .chameleon import *
+    from .chimera import *
     from .chinese_clip import *
     from .chmv2 import *
     from .clap import *

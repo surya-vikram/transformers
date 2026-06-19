@@ -76,6 +76,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("canine", "CanineConfig"),
         ("chameleon", "ChameleonConfig"),
         ("chameleon_vqgan", "ChameleonVQVAEConfig"),
+        ("chimera", "ChimeraConfig"),
         ("chinese_clip", "ChineseCLIPConfig"),
         ("chinese_clip_text_model", "ChineseCLIPTextConfig"),
         ("chinese_clip_vision_model", "ChineseCLIPVisionConfig"),
