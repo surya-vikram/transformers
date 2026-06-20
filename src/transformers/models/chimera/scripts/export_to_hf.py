@@ -11,6 +11,7 @@ import shutil
 import tarfile
 import tempfile
 import zipfile
+from importlib import resources
 from pathlib import Path
 
 from transformers import ChimeraConfig, ChimeraForCausalLM, GenerationConfig, PreTrainedTokenizerFast
@@ -25,8 +26,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tokenizer-archive",
         type=Path,
-        default=Path("/datasets/megadata/tokenizer.zip"),
-        help="Tokenizer archive. Supports tar/tar.gz archives and zip files.",
+        default=None,
+        help="Tokenizer archive. Supports tar/tar.gz archives and zip files. Defaults to the bundled tokenizer.",
+    )
+    parser.add_argument(
+        "--tokenizer-dir",
+        type=Path,
+        default=None,
+        help="Directory containing tokenizer.json. Defaults to the bundled tokenizer.",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--no-weights", action="store_true", help="Write config/tokenizer files only.")
@@ -67,6 +74,26 @@ def extract_tokenizer_archive(archive: Path, target: Path) -> Path:
             return find_tokenizer_root(target)
     except zipfile.BadZipFile as exc:
         raise ValueError(f"Unsupported tokenizer archive format: {archive}") from exc
+
+
+def bundled_tokenizer_root() -> Path:
+    tokenizer_root = Path(__file__).resolve().parents[1] / "tokenizer"
+    if (tokenizer_root / "tokenizer.json").exists():
+        return tokenizer_root
+
+    try:
+        package_root = resources.files("transformers.models.chimera")
+        tokenizer_resource = package_root.joinpath("tokenizer")
+        tokenizer_path = Path(str(tokenizer_resource))
+    except (ModuleNotFoundError, TypeError):
+        tokenizer_path = Path()
+
+    if (tokenizer_path / "tokenizer.json").exists():
+        return tokenizer_path
+
+    raise FileNotFoundError(
+        "Bundled Chimera tokenizer not found. Pass --tokenizer-dir or --tokenizer-archive explicitly."
+    )
 
 
 def update_json_file(path: Path, updates: dict) -> None:
@@ -200,7 +227,12 @@ def main() -> None:
     write_readme(output)
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        tokenizer_root = extract_tokenizer_archive(args.tokenizer_archive, Path(tmpdir))
+        if args.tokenizer_dir is not None:
+            tokenizer_root = args.tokenizer_dir
+        elif args.tokenizer_archive is not None:
+            tokenizer_root = extract_tokenizer_archive(args.tokenizer_archive, Path(tmpdir))
+        else:
+            tokenizer_root = bundled_tokenizer_root()
         tokenizer = copy_tokenizer_artifacts(tokenizer_root, output)
 
     model_parameter_count = None
