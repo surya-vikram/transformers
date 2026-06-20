@@ -35,9 +35,9 @@ class ChimeraConfig(PreTrainedConfig):
     vocab_size: int = 50176
     hidden_size: int = 2048
     intermediate_size: int = 8192
-    moe_intermediate_size: int = 704
-    shared_expert_intermediate_size: int = 704
-    num_hidden_layers: int = 28
+    moe_intermediate_size: int = 1024
+    shared_expert_intermediate_size: int = 1024
+    num_hidden_layers: int = 25
     num_attention_heads: int = 16
     num_key_value_heads: int | None = 2
     head_dim: int = 256
@@ -60,8 +60,8 @@ class ChimeraConfig(PreTrainedConfig):
 
     first_k_dense_replace: int = 1
     last_k_dense_replace: int = 1
-    n_routed_experts: int = 96
-    num_experts_per_tok: int = 8
+    n_routed_experts: int = 64
+    num_experts_per_tok: int = 4
     n_shared_experts: int = 1
     n_group: int = 1
     topk_group: int = 1
@@ -70,6 +70,7 @@ class ChimeraConfig(PreTrainedConfig):
     topk_method: str = "noaux_tc"
     routed_scaling_factor: float = 1.0
     router_aux_loss_coef: float = 0.001
+    router_bias_update_rate: float = 0.0001
     output_router_logits: bool = False
 
     def __post_init__(self, **kwargs):

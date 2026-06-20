@@ -146,18 +146,18 @@ def build_config() -> ChimeraConfig:
         pad_token_id=1,
         tie_word_embeddings=False,
         hidden_size=2048,
-        num_hidden_layers=28,
+        num_hidden_layers=25,
         num_attention_heads=16,
         num_key_value_heads=2,
         head_dim=256,
         first_k_dense_replace=1,
         last_k_dense_replace=1,
         intermediate_size=8192,
-        n_routed_experts=96,
-        num_experts_per_tok=8,
+        n_routed_experts=64,
+        num_experts_per_tok=4,
         n_shared_experts=1,
-        moe_intermediate_size=704,
-        shared_expert_intermediate_size=704,
+        moe_intermediate_size=1024,
+        shared_expert_intermediate_size=1024,
         max_position_embeddings=32768,
         original_max_position_embeddings=8192,
         rope_theta=10000000.0,
@@ -166,6 +166,7 @@ def build_config() -> ChimeraConfig:
         topk_method="noaux_tc",
         norm_topk_prob=True,
         router_aux_loss_coef=0.001,
+        router_bias_update_rate=0.0001,
         routed_scaling_factor=1.0,
         n_group=1,
         topk_group=1,
@@ -186,7 +187,7 @@ def write_generation_config(output: Path) -> None:
 
 
 def write_readme(output: Path) -> None:
-    readme = """# Chimera 12B
+    readme = """# Chimera 10B
 
 Chimera is a decoder-only sparse MoE language model configuration.
 
