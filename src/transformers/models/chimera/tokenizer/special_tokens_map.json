@@ -1,4 +1,8 @@
 {
+  "additional_special_tokens": [
+    "<start_of_turn>",
+    "<end_of_turn>"
+  ],
   "bos_token": "<BOS>",
   "eos_token": "<EOS>",
   "pad_token": "<EOS>"

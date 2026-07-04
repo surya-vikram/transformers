@@ -20,6 +20,24 @@
       "rstrip": false,
       "normalized": false,
       "special": true
+    },
+    {
+      "id": 50174,
+      "content": "<start_of_turn>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 50175,
+      "content": "<end_of_turn>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
     }
   ],
   "normalizer": null,
@@ -50245,8 +50263,8 @@
       "rgan": 50171,
       "ĠKeats": 50172,
       "\"...": 50173,
-      "ĠLena": 50174,
-      "Ġintercepted": 50175
+      "<start_of_turn>": 50174,
+      "<end_of_turn>": 50175
     },
     "merges": [
       [
@@ -249912,14 +249930,6 @@
       [
         "\"",
         "..."
-      ],
-      [
-        "ĠLe",
-        "na"
-      ],
-      [
-        "Ġinter",
-        "cepted"
       ]
     ]
   }

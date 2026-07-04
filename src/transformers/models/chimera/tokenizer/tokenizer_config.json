@@ -1,8 +1,13 @@
 {
+  "additional_special_tokens": [
+    "<start_of_turn>",
+    "<end_of_turn>"
+  ],
   "backend": "tokenizers",
   "bos_token": "<BOS>",
+  "chat_template": "{% for message in messages %}{{ '<start_of_turn>' + message['role'] + '\\n' + message['content']|trim + '<end_of_turn>\\n' }}{% endfor %}{% if add_generation_prompt %}{{ '<start_of_turn>assistant\\n' }}{% endif %}",
   "eos_token": "<EOS>",
   "model_max_length": 32768,
   "pad_token": "<EOS>",
-  "tokenizer_class": "TokenizersBackend"
+  "tokenizer_class": "PreTrainedTokenizerFast"
 }

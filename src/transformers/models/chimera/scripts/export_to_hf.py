@@ -18,6 +18,15 @@ from transformers import ChimeraConfig, ChimeraForCausalLM, GenerationConfig, Pr
 
 
 TOKENIZER_FILES = ("tokenizer.json", "tokenizer_config.json", "special_tokens_map.json", "training_report.json")
+CHIMERA_CHAT_TEMPLATE = (
+    "{% for message in messages %}"
+    "{{ '<start_of_turn>' + message['role'] + '\\n' + message['content']|trim + '<end_of_turn>\\n' }}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}"
+    "{{ '<start_of_turn>assistant\\n' }}"
+    "{% endif %}"
+)
+CHIMERA_ADDITIONAL_SPECIAL_TOKENS = ["<start_of_turn>", "<end_of_turn>"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -115,11 +124,15 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
         bos_token="<BOS>",
         eos_token="<EOS>",
         pad_token="<EOS>",
+        additional_special_tokens=CHIMERA_ADDITIONAL_SPECIAL_TOKENS,
+        chat_template=CHIMERA_CHAT_TEMPLATE,
         model_max_length=32768,
     )
     if len(tokenizer) != 50176:
         raise ValueError(f"Expected tokenizer length 50176, found {len(tokenizer)}")
 
+    tokenizer.save_pretrained(output)
+    (output / "chat_template.jinja").write_text(CHIMERA_CHAT_TEMPLATE, encoding="utf-8")
     update_json_file(
         output / "tokenizer_config.json",
         {
@@ -127,14 +140,20 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
             "eos_token": "<EOS>",
             "model_max_length": 32768,
             "pad_token": "<EOS>",
+            "additional_special_tokens": CHIMERA_ADDITIONAL_SPECIAL_TOKENS,
+            "chat_template": CHIMERA_CHAT_TEMPLATE,
             "tokenizer_class": "PreTrainedTokenizerFast",
         },
     )
     update_json_file(
         output / "special_tokens_map.json",
-        {"bos_token": "<BOS>", "eos_token": "<EOS>", "pad_token": "<EOS>"},
+        {
+            "additional_special_tokens": CHIMERA_ADDITIONAL_SPECIAL_TOKENS,
+            "bos_token": "<BOS>",
+            "eos_token": "<EOS>",
+            "pad_token": "<EOS>",
+        },
     )
-    tokenizer.save_pretrained(output)
     return tokenizer
 
 
@@ -199,8 +218,16 @@ This export keeps the base tokenizer vocabulary unchanged:
 - `bos_token`: `<BOS>` / id 0
 - `eos_token`: `<EOS>` / id 1
 - `pad_token`: `<EOS>` / id 1
+- `additional_special_tokens`: `<start_of_turn>` / id 50174, `<end_of_turn>` / id 50175
 
-The model is intended as a pretraining/base model. No chat, role, reasoning, or tool-use tokens are added.
+The chat template is a minimal non-reasoning, non-tool-calling turn format:
+
+```text
+<start_of_turn>user
+Hello<end_of_turn>
+<start_of_turn>assistant
+Hi<end_of_turn>
+```
 """
     (output / "README.md").write_text(readme)
 
@@ -209,7 +236,7 @@ def copy_scripts(output: Path) -> None:
     scripts_dir = output / "scripts"
     scripts_dir.mkdir(exist_ok=True)
     script_root = Path(__file__).resolve().parent
-    for name in ("export_to_hf.py", "infer.py"):
+    for name in ("export_to_hf.py", "infer.py", "replace_tokenizer_tokens.py"):
         src = script_root / name
         if src.exists():
             shutil.copy2(src, scripts_dir / name)
