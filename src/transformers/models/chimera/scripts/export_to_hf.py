@@ -139,7 +139,7 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
 
 
 def build_config() -> ChimeraConfig:
-    return ChimeraConfig(
+    config = ChimeraConfig(
         vocab_size=50176,
         bos_token_id=0,
         eos_token_id=1,
@@ -171,6 +171,8 @@ def build_config() -> ChimeraConfig:
         n_group=1,
         topk_group=1,
     )
+    config.architectures = ["ChimeraForCausalLM"]
+    return config
 
 
 def write_generation_config(output: Path) -> None:
