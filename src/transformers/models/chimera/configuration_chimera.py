@@ -58,8 +58,8 @@ class ChimeraConfig(PreTrainedConfig):
     attention_dropout: float | int | None = 0.0
     mlp_bias: bool = False
 
-    first_k_dense_replace: int = 1
-    last_k_dense_replace: int = 1
+    first_k_dense_replace: int = 2
+    last_k_dense_replace: int = 0
     n_routed_experts: int = 64
     num_experts_per_tok: int = 4
     n_shared_experts: int = 1
