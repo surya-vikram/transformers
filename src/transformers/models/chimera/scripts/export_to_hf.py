@@ -17,7 +17,7 @@ from pathlib import Path
 from transformers import ChimeraConfig, ChimeraForCausalLM, GenerationConfig, PreTrainedTokenizerFast
 
 
-TOKENIZER_FILES = ("tokenizer.json", "tokenizer_config.json", "special_tokens_map.json", "training_report.json")
+TOKENIZER_FILES = ("training_report.json",)
 CHIMERA_CHAT_TEMPLATE = (
     "{% for message in messages %}"
     "{{ '<start_of_turn>' + message['role'] + '\\n' + message['content']|trim + '<end_of_turn>\\n' }}"
@@ -26,7 +26,24 @@ CHIMERA_CHAT_TEMPLATE = (
     "{{ '<start_of_turn>assistant\\n' }}"
     "{% endif %}"
 )
-CHIMERA_ADDITIONAL_SPECIAL_TOKENS = ["<start_of_turn>", "<end_of_turn>"]
+CHIMERA_ADDITIONAL_SPECIAL_TOKENS = [
+    "<start_of_turn>",
+    "<end_of_turn>",
+    "<DUMMY_2>",
+    "<DUMMY_3>",
+    "<DUMMY_4>",
+    "<DUMMY_5>",
+    "<DUMMY_6>",
+    "<DUMMY_7>",
+    "<DUMMY_8>",
+    "<DUMMY_9>",
+]
+CHIMERA_TOKEN_IDS = {
+    "<BOS>": 0,
+    "<EOS>": 1,
+    "<start_of_turn>": 2,
+    "<end_of_turn>": 3,
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -86,9 +103,10 @@ def extract_tokenizer_archive(archive: Path, target: Path) -> Path:
 
 
 def bundled_tokenizer_root() -> Path:
-    tokenizer_root = Path(__file__).resolve().parents[1] / "tokenizer"
-    if (tokenizer_root / "tokenizer.json").exists():
-        return tokenizer_root
+    script_root = Path(__file__).resolve().parents[1]
+    for tokenizer_root in (script_root / "tokenizer", script_root):
+        if (tokenizer_root / "tokenizer.json").exists():
+            return tokenizer_root
 
     try:
         package_root = resources.files("transformers.models.chimera")
@@ -119,20 +137,39 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
         if src.exists():
             shutil.copy2(src, output / name)
 
-    tokenizer = PreTrainedTokenizerFast(
-        tokenizer_file=str(output / "tokenizer.json"),
-        bos_token="<BOS>",
-        eos_token="<EOS>",
-        pad_token="<EOS>",
-        additional_special_tokens=CHIMERA_ADDITIONAL_SPECIAL_TOKENS,
-        chat_template=CHIMERA_CHAT_TEMPLATE,
-        model_max_length=32768,
-    )
+    tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_root)
     if len(tokenizer) != 50176:
         raise ValueError(f"Expected tokenizer length 50176, found {len(tokenizer)}")
+    for token, expected_id in CHIMERA_TOKEN_IDS.items():
+        actual_id = tokenizer.convert_tokens_to_ids(token)
+        if actual_id != expected_id:
+            raise ValueError(f"Expected {token!r} id {expected_id}, found {actual_id}")
+        if tokenizer.encode(token, add_special_tokens=False) != [expected_id]:
+            raise ValueError(f"Expected {token!r} to encode as one token with id {expected_id}")
+    if tokenizer.unk_token is not None:
+        raise ValueError(f"Chimera byte-level BPE must not define an unknown token: {tokenizer.unk_token!r}")
+    configured_special_tokens = json.loads((tokenizer_root / "tokenizer_config.json").read_text()).get(
+        "additional_special_tokens", []
+    )
+    if configured_special_tokens != CHIMERA_ADDITIONAL_SPECIAL_TOKENS:
+        raise ValueError(
+            "Unexpected Chimera additional special tokens: "
+            f"{configured_special_tokens}"
+        )
+    missing_special_tokens = [
+        token for token in CHIMERA_ADDITIONAL_SPECIAL_TOKENS if token not in tokenizer.all_special_tokens
+    ]
+    if missing_special_tokens:
+        raise ValueError(f"Tokens are not registered as special: {missing_special_tokens}")
+
+    tokenizer.bos_token = "<BOS>"
+    tokenizer.eos_token = "<EOS>"
+    tokenizer.pad_token = "<EOS>"
+    tokenizer.chat_template = CHIMERA_CHAT_TEMPLATE
+    tokenizer.model_max_length = 32768
 
     tokenizer.save_pretrained(output)
-    (output / "chat_template.jinja").write_text(CHIMERA_CHAT_TEMPLATE, encoding="utf-8")
+    (output / "chat_template.jinja").write_text(CHIMERA_CHAT_TEMPLATE + "\n", encoding="utf-8")
     update_json_file(
         output / "tokenizer_config.json",
         {
@@ -212,13 +249,18 @@ def write_readme(output: Path) -> None:
 
 Chimera is a decoder-only sparse MoE language model configuration.
 
-This export keeps the base tokenizer vocabulary unchanged:
+This export keeps the tokenizer vocabulary size fixed while assigning reserved token IDs to chat markers:
 
 - `vocab_size`: 50176
 - `bos_token`: `<BOS>` / id 0
 - `eos_token`: `<EOS>` / id 1
 - `pad_token`: `<EOS>` / id 1
-- `additional_special_tokens`: `<start_of_turn>` / id 50174, `<end_of_turn>` / id 50175
+- `additional_special_tokens`: `<start_of_turn>` / id 2, `<end_of_turn>` / id 3
+- `reserved tokens`: `<DUMMY_2>` through `<DUMMY_9>` / ids 4 through 11
+
+`<BOS>` is retained for compatibility but is not inserted by the chat template. `<EOS>` remains the
+pretraining document separator, generation EOS, and padding token. Chat inference may additionally stop
+on `<end_of_turn>`.
 
 The chat template is a minimal non-reasoning, non-tool-calling turn format:
 

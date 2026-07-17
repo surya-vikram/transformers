@@ -1,9 +1,17 @@
 {
-  "additional_special_tokens": [
-    "<start_of_turn>",
-    "<end_of_turn>"
-  ],
   "bos_token": "<BOS>",
   "eos_token": "<EOS>",
-  "pad_token": "<EOS>"
+  "pad_token": "<EOS>",
+  "additional_special_tokens": [
+    "<start_of_turn>",
+    "<end_of_turn>",
+    "<DUMMY_2>",
+    "<DUMMY_3>",
+    "<DUMMY_4>",
+    "<DUMMY_5>",
+    "<DUMMY_6>",
+    "<DUMMY_7>",
+    "<DUMMY_8>",
+    "<DUMMY_9>"
+  ]
 }

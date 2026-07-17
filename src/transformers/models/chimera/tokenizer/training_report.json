@@ -1,0 +1,176 @@
+{
+  "step8_dir": "/data/output/step8_final",
+  "output_dir": "/data/output/step9_tokenizer",
+  "source_filter": null,
+  "vocab_size": 50176,
+  "special_tokens": [
+    "<BOS>",
+    "<EOS>",
+    "<start_of_turn>",
+    "<end_of_turn>",
+    "<DUMMY_2>",
+    "<DUMMY_3>",
+    "<DUMMY_4>",
+    "<DUMMY_5>",
+    "<DUMMY_6>",
+    "<DUMMY_7>",
+    "<DUMMY_8>",
+    "<DUMMY_9>"
+  ],
+  "dummy_token_count": 8,
+  "dummy_tokens": [
+    "<DUMMY_2>",
+    "<DUMMY_3>",
+    "<DUMMY_4>",
+    "<DUMMY_5>",
+    "<DUMMY_6>",
+    "<DUMMY_7>",
+    "<DUMMY_8>",
+    "<DUMMY_9>"
+  ],
+  "dummy_token_ids": {
+    "<DUMMY_2>": 4,
+    "<DUMMY_3>": 5,
+    "<DUMMY_4>": 6,
+    "<DUMMY_5>": 7,
+    "<DUMMY_6>": 8,
+    "<DUMMY_7>": 9,
+    "<DUMMY_8>": 10,
+    "<DUMMY_9>": 11
+  },
+  "tokenizer_training_cap": {
+    "mode": "min_token_and_char_caps",
+    "max_total_tokens": 25000000000,
+    "chars_per_token": 4.0,
+    "token_cap_derived_chars": 100000000000,
+    "max_total_chars_override": 25000000000,
+    "effective_max_total_chars": 25000000000
+  },
+  "doc_counts": {
+    "fineweb_edu": 705095124,
+    "military_data": 54365
+  },
+  "char_counts": {
+    "fineweb_edu": 3424227227982,
+    "military_data": 1424463750
+  },
+  "budget_summary": {
+    "mode": "production",
+    "domain_chars_available": 1424463750,
+    "general_chars_available": 3424227227982,
+    "target_total_chars": 25000000000,
+    "domain_fraction_requested": 0.05,
+    "domain_budget_chars": 1250000000,
+    "max_total_chars": 25000000000,
+    "budgets": {
+      "fineweb_edu": 23750000000,
+      "military_data": 1250000000
+    },
+    "cap_summary": {
+      "mode": "min_token_and_char_caps",
+      "max_total_tokens": 25000000000,
+      "chars_per_token": 4.0,
+      "token_cap_derived_chars": 100000000000,
+      "max_total_chars_override": 25000000000,
+      "effective_max_total_chars": 25000000000
+    }
+  },
+  "bos_id": 0,
+  "eos_id": 1,
+  "special_token_ids": {
+    "bos_token": 0,
+    "eos_token": 1,
+    "pad_token": 1,
+    "unk_token": null,
+    "chat_tokens": {
+      "<start_of_turn>": 2,
+      "<end_of_turn>": 3
+    },
+    "dummy_tokens": {
+      "<DUMMY_2>": 4,
+      "<DUMMY_3>": 5,
+      "<DUMMY_4>": 6,
+      "<DUMMY_5>": 7,
+      "<DUMMY_6>": 8,
+      "<DUMMY_7>": 9,
+      "<DUMMY_8>": 10,
+      "<DUMMY_9>": 11
+    }
+  },
+  "fertility_tokens_per_word": 1.3913530889085588,
+  "chars_per_token": 4.403317982898709,
+  "tokens_per_char": 0.227101472999163,
+  "unk_token_count": 0,
+  "tokenizer_diagnostics": {
+    "sample_config": {
+      "docs_per_source": 1000,
+      "max_chars_per_doc": 20000,
+      "seed": 42,
+      "sample_method": "deterministic_lowest_hash_per_source"
+    },
+    "special_token_ids": {
+      "bos_token": 0,
+      "eos_token": 1,
+      "pad_token": 1,
+      "unk_token": null,
+      "chat_tokens": {
+        "<start_of_turn>": 2,
+        "<end_of_turn>": 3
+      },
+      "dummy_tokens": {
+        "<DUMMY_2>": 4,
+        "<DUMMY_3>": 5,
+        "<DUMMY_4>": 6,
+        "<DUMMY_5>": 7,
+        "<DUMMY_6>": 8,
+        "<DUMMY_7>": 9,
+        "<DUMMY_8>": 10,
+        "<DUMMY_9>": 11
+      }
+    },
+    "overall": {
+      "sampled_docs": 2000,
+      "sampled_chars": 14465996,
+      "sampled_words": 2361190,
+      "sampled_tokens": 3285249,
+      "unk_token_count": 0,
+      "fertility_tokens_per_word": 1.3913530889085588,
+      "chars_per_token": 4.403317982898709,
+      "tokens_per_char": 0.227101472999163
+    },
+    "per_source": {
+      "fineweb_edu": {
+        "sampled_docs": 1000,
+        "sampled_chars": 4497004,
+        "sampled_words": 726857,
+        "sampled_tokens": 933042,
+        "unk_token_count": 0,
+        "fertility_tokens_per_word": 1.283666525877855,
+        "chars_per_token": 4.8197230135406555,
+        "tokens_per_char": 0.2074808027744694
+      },
+      "military_data": {
+        "sampled_docs": 1000,
+        "sampled_chars": 9968992,
+        "sampled_words": 1634333,
+        "sampled_tokens": 2352207,
+        "unk_token_count": 0,
+        "fertility_tokens_per_word": 1.4392458574843683,
+        "chars_per_token": 4.238144006883748,
+        "tokens_per_char": 0.2359523410190318
+      }
+    }
+  },
+  "timing_seconds": {
+    "stats_scan": 282.76780796051025,
+    "budget_allocation": 8.20159912109375e-05,
+    "training": 14425.398775577545,
+    "save_bundle": 0.04767560958862305,
+    "diagnostics": 1228.2042396068573,
+    "total": 15936.490160942078
+  },
+  "chat_token_ids": {
+    "<start_of_turn>": 2,
+    "<end_of_turn>": 3
+  }
+}

@@ -1,13 +1,21 @@
 {
+  "tokenizer_class": "PreTrainedTokenizerFast",
+  "bos_token": "<BOS>",
+  "eos_token": "<EOS>",
+  "pad_token": "<EOS>",
   "additional_special_tokens": [
     "<start_of_turn>",
-    "<end_of_turn>"
+    "<end_of_turn>",
+    "<DUMMY_2>",
+    "<DUMMY_3>",
+    "<DUMMY_4>",
+    "<DUMMY_5>",
+    "<DUMMY_6>",
+    "<DUMMY_7>",
+    "<DUMMY_8>",
+    "<DUMMY_9>"
   ],
-  "backend": "tokenizers",
-  "bos_token": "<BOS>",
+  "clean_up_tokenization_spaces": false,
   "chat_template": "{% for message in messages %}{{ '<start_of_turn>' + message['role'] + '\\n' + message['content']|trim + '<end_of_turn>\\n' }}{% endfor %}{% if add_generation_prompt %}{{ '<start_of_turn>assistant\\n' }}{% endif %}",
-  "eos_token": "<EOS>",
-  "model_max_length": 32768,
-  "pad_token": "<EOS>",
-  "tokenizer_class": "PreTrainedTokenizerFast"
+  "model_max_length": 32768
 }
