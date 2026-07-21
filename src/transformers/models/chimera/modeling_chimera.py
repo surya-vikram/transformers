@@ -243,11 +243,28 @@ class ChimeraExpert(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
 
 
+class ChimeraExperts(nn.ModuleList):
+    def __init__(self, config: ChimeraConfig):
+        super().__init__([ChimeraExpert(config) for _ in range(config.n_routed_experts)])
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        final_hidden_states = torch.zeros_like(hidden_states)
+        expert_mask = F.one_hot(top_k_index, num_classes=len(self)).permute(2, 1, 0)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx.item()
+            topk_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_hidden_states = self[expert_idx](hidden_states[token_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, topk_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+        return final_hidden_states
+
+
 class ChimeraSparseMoeBlock(nn.Module):
     def __init__(self, config: ChimeraConfig):
         super().__init__()
         self.config = config
-        self.experts = nn.ModuleList([ChimeraExpert(config) for _ in range(config.n_routed_experts)])
+        self.experts = ChimeraExperts(config)
         self.gate = ChimeraTopkRouter(config)
         self.shared_experts = (
             None
@@ -292,15 +309,7 @@ class ChimeraSparseMoeBlock(nn.Module):
         router_logits = self.gate(hidden_states)
         topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
 
-        final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = F.one_hot(topk_indices, num_classes=self.n_routed_experts).permute(2, 1, 0)
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx.item()
-            topk_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_hidden_states = self.experts[expert_idx](hidden_states[token_idx])
-            current_hidden_states = current_hidden_states * topk_weights[token_idx, topk_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+        final_hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
 
         final_hidden_states = final_hidden_states.reshape(orig_shape)
         if self.shared_experts is not None:

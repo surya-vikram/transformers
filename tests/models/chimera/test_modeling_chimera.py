@@ -1,0 +1,84 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+
+import torch
+
+from transformers import ChimeraConfig
+from transformers.testing_utils import require_torch
+from transformers.utils import is_torch_available
+
+
+if is_torch_available():
+    from transformers.models.chimera.modeling_chimera import ChimeraExperts, ChimeraSparseMoeBlock
+
+
+@require_torch
+class ChimeraExpertsTest(unittest.TestCase):
+    def setUp(self):
+        self.config = ChimeraConfig(
+            hidden_size=8,
+            intermediate_size=16,
+            moe_intermediate_size=12,
+            shared_expert_intermediate_size=12,
+            num_hidden_layers=3,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            first_k_dense_replace=2,
+            n_routed_experts=4,
+            num_experts_per_tok=2,
+            n_shared_experts=1,
+        )
+
+    def test_experts_vllm_forward_contract(self):
+        torch.manual_seed(0)
+        experts = ChimeraExperts(self.config)
+        hidden_states = torch.randn(6, self.config.hidden_size)
+        top_k_index = torch.tensor([[0, 1], [2, 3], [1, 2], [3, 0], [0, 2], [1, 3]])
+        top_k_weights = torch.rand(6, self.config.num_experts_per_tok)
+
+        expected = torch.zeros_like(hidden_states)
+        for token_idx in range(hidden_states.shape[0]):
+            for topk_pos in range(self.config.num_experts_per_tok):
+                expert_idx = top_k_index[token_idx, topk_pos]
+                expected[token_idx] += (
+                    experts[expert_idx](hidden_states[token_idx : token_idx + 1]).squeeze(0)
+                    * top_k_weights[token_idx, topk_pos]
+                )
+
+        actual = experts(hidden_states, top_k_index, top_k_weights)
+        torch.testing.assert_close(actual, expected)
+
+    def test_sparse_moe_checkpoint_keys_are_unchanged(self):
+        block = ChimeraSparseMoeBlock(self.config)
+        keys = set(block.state_dict())
+
+        self.assertIn("experts.0.gate_proj.weight", keys)
+        self.assertIn("experts.3.down_proj.weight", keys)
+        self.assertFalse(any("experts.experts" in key for key in keys))
+
+    def test_sparse_moe_block_forward(self):
+        block = ChimeraSparseMoeBlock(self.config)
+        hidden_states = torch.randn(2, 5, self.config.hidden_size)
+
+        output, router_logits = block(hidden_states)
+
+        self.assertEqual(output.shape, hidden_states.shape)
+        self.assertEqual(router_logits.shape, (10, self.config.n_routed_experts))
+
+
+if __name__ == "__main__":
+    unittest.main()
