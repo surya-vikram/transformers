@@ -68,9 +68,9 @@ class ChimeraConfig(PreTrainedConfig):
     norm_topk_prob: bool = True
     scoring_func: str = "sigmoid"
     topk_method: str = "noaux_tc"
-    routed_scaling_factor: float = 1.0
-    router_aux_loss_coef: float = 0.001
-    router_bias_update_rate: float = 0.0001
+    routed_scaling_factor: float = 2.5
+    router_aux_loss_coef: float = 0.0001
+    router_bias_update_rate: float = 0.001
     output_router_logits: bool = False
 
     def __post_init__(self, **kwargs):

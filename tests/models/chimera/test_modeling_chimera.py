@@ -62,6 +62,13 @@ class ChimeraExpertsTest(unittest.TestCase):
         actual = experts(hidden_states, top_k_index, top_k_weights)
         torch.testing.assert_close(actual, expected)
 
+    def test_locked_router_defaults(self):
+        config = ChimeraConfig()
+
+        self.assertEqual(config.router_aux_loss_coef, 0.0001)
+        self.assertEqual(config.router_bias_update_rate, 0.001)
+        self.assertEqual(config.routed_scaling_factor, 2.5)
+
     def test_sparse_moe_checkpoint_keys_are_unchanged(self):
         block = ChimeraSparseMoeBlock(self.config)
         keys = set(block.state_dict())

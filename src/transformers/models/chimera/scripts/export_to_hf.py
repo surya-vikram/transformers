@@ -221,9 +221,9 @@ def build_config() -> ChimeraConfig:
         scoring_func="sigmoid",
         topk_method="noaux_tc",
         norm_topk_prob=True,
-        router_aux_loss_coef=0.001,
-        router_bias_update_rate=0.0001,
-        routed_scaling_factor=1.0,
+        router_aux_loss_coef=0.0001,
+        router_bias_update_rate=0.001,
+        routed_scaling_factor=2.5,
         n_group=1,
         topk_group=1,
     )
