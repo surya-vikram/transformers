@@ -390,6 +390,7 @@ class ChimeraDecoderLayer(GradientCheckpointingLayer):
 class ChimeraPreTrainedModel(PreTrainedModel):
     config: ChimeraConfig
     base_model_prefix = "model"
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["ChimeraDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -407,6 +408,14 @@ class ChimeraPreTrainedModel(PreTrainedModel):
 
     def _adjust_missing_and_unexpected_keys(self, loading_info):
         super()._adjust_missing_and_unexpected_keys(loading_info)
+        # The fast safetensors loader replaces parameters with freshly created
+        # ``nn.Parameter`` objects and defaults floating-point tensors to
+        # ``requires_grad=True``. Restore the checkpoint contract after loading:
+        # router correction biases are present in every checkpoint but frozen in
+        # both routing modes.
+        for module in self.modules():
+            if isinstance(module, ChimeraTopkRouter):
+                module.e_score_correction_bias.requires_grad_(False)
         missing_router_biases = sorted(
             key for key in loading_info.missing_keys if key.endswith(".gate.e_score_correction_bias")
         )

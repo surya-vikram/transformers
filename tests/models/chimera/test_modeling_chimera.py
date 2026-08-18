@@ -214,6 +214,24 @@ class ChimeraExpertsTest(unittest.TestCase):
             )
         )
 
+    def test_router_bias_stays_float32_when_pretrained_model_loads_bfloat16(self):
+        config = deepcopy(self.config)
+        config.vocab_size = 32
+        model = ChimeraForCausalLM(config)
+
+        with TemporaryDirectory() as tmpdir:
+            model.save_pretrained(tmpdir)
+            reloaded = ChimeraForCausalLM.from_pretrained(tmpdir, dtype=torch.bfloat16)
+
+        router_biases = [
+            parameter
+            for name, parameter in reloaded.named_parameters()
+            if name.endswith(".gate.e_score_correction_bias")
+        ]
+        self.assertTrue(router_biases)
+        self.assertTrue(all(parameter.dtype == torch.float32 for parameter in router_biases))
+        self.assertFalse(any(parameter.requires_grad for parameter in router_biases))
+
     def test_router_load_weights_preserves_expert_bias_when_use_is_disabled(self):
         config_without_bias = deepcopy(self.config)
         config_without_bias.load_with_bias = False
@@ -254,7 +272,7 @@ class ChimeraExpertsTest(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, missing_key):
                     ChimeraForCausalLM.from_pretrained(None, config=load_config, state_dict=state_dict)
 
-    def test_model_save_reload_keeps_identical_weights_when_bias_use_is_disabled(self):
+    def test_model_save_reload_keeps_identical_weights_and_frozen_biases_in_both_modes(self):
         config = deepcopy(self.config)
         config.vocab_size = 32
         model = ChimeraForCausalLM(config)
@@ -266,15 +284,26 @@ class ChimeraExpertsTest(unittest.TestCase):
 
         with TemporaryDirectory() as tmpdir:
             model.save_pretrained(tmpdir)
-            disabled_config = ChimeraConfig.from_pretrained(tmpdir)
-            disabled_config.load_with_bias = False
-            reloaded = ChimeraForCausalLM.from_pretrained(tmpdir, config=disabled_config)
+            source_state = model.state_dict()
+            for load_with_bias in (True, False):
+                load_config = ChimeraConfig.from_pretrained(tmpdir)
+                load_config.load_with_bias = load_with_bias
+                reloaded = ChimeraForCausalLM.from_pretrained(tmpdir, config=load_config)
 
-        source_state = model.state_dict()
-        reloaded_state = reloaded.state_dict()
-        self.assertEqual(set(source_state), set(reloaded_state))
-        for key in source_state:
-            self.assertTrue(torch.equal(source_state[key], reloaded_state[key]), key)
+                reloaded_state = reloaded.state_dict()
+                self.assertEqual(set(source_state), set(reloaded_state))
+                for key in source_state:
+                    self.assertTrue(torch.equal(source_state[key], reloaded_state[key]), key)
+                router_biases = [
+                    parameter
+                    for name, parameter in reloaded.named_parameters()
+                    if name.endswith(".gate.e_score_correction_bias")
+                ]
+                expected_router_biases = (
+                    config.num_hidden_layers - config.first_k_dense_replace - config.last_k_dense_replace
+                )
+                self.assertEqual(len(router_biases), expected_router_biases)
+                self.assertFalse(any(parameter.requires_grad for parameter in router_biases))
 
 
 if __name__ == "__main__":

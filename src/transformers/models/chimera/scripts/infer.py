@@ -102,7 +102,10 @@ def main() -> None:
         raise RuntimeError(f"Expected {expected_biases} router bias tensors, found {len(router_biases)}")
     if any(parameter.requires_grad for parameter in router_biases.values()):
         raise RuntimeError("Router correction biases must be frozen during inference")
-    print(f"loaded_router_bias_tensors={len(router_biases)} frozen=true")
+    router_bias_dtypes = {parameter.dtype for parameter in router_biases.values()}
+    if router_bias_dtypes != {torch.float32}:
+        raise RuntimeError(f"Router correction biases must load in float32, found {router_bias_dtypes}")
+    print(f"loaded_router_bias_tensors={len(router_biases)} frozen=true dtype=float32")
     prompt = resolve_prompt(args)
     inputs = prepare_inputs(tokenizer, prompt, args)
     inputs = {key: value.to(model.device) for key, value in inputs.items()}
