@@ -170,6 +170,8 @@ class ChimeraAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.q_norm = ChimeraRMSNorm(self.head_dim, eps=config.rms_norm_eps) if config.qk_layernorm else nn.Identity()
+        self.k_norm = ChimeraRMSNorm(self.head_dim, eps=config.rms_norm_eps) if config.qk_layernorm else nn.Identity()
 
     def forward(
         self,
@@ -181,8 +183,8 @@ class ChimeraAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -224,7 +226,34 @@ class ChimeraTopkRouter(nn.Module):
         super().__init__()
         self.config = config
         self.weight = nn.Parameter(torch.empty((config.n_routed_experts, config.hidden_size)))
-        self.e_score_correction_bias = nn.Parameter(torch.zeros(config.n_routed_experts))
+        if config.load_with_bias:
+            self.e_score_correction_bias = nn.Parameter(torch.zeros(config.n_routed_experts))
+        else:
+            self.register_buffer(
+                "e_score_correction_bias", torch.zeros(config.n_routed_experts), persistent=False
+            )
+        self._register_load_state_dict_pre_hook(self.load_hook)
+
+    def load_hook(self, state_dict, prefix, *args):
+        if not self.config.load_with_bias:
+            state_dict.pop(f"{prefix}e_score_correction_bias", None)
+
+    def load_weights(self, weights):
+        loaded_params = set()
+        with torch.no_grad():
+            for name, loaded_weight in weights:
+                if name == "weight":
+                    self.weight.copy_(loaded_weight)
+                    loaded_params.add(name)
+                elif name == "e_score_correction_bias":
+                    if self.config.load_with_bias:
+                        self.e_score_correction_bias.copy_(loaded_weight)
+                        loaded_params.add(name)
+                    else:
+                        self.e_score_correction_bias.zero_()
+                else:
+                    raise ValueError(f"Unexpected ChimeraTopkRouter weight: {name}")
+        return loaded_params
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.config.hidden_size)
@@ -280,7 +309,9 @@ class ChimeraSparseMoeBlock(nn.Module):
 
     def route_tokens_to_experts(self, router_logits):
         router_scores = router_logits.sigmoid()
-        scores_for_choice = router_scores + self.gate.e_score_correction_bias
+        scores_for_choice = router_scores
+        if self.config.load_with_bias:
+            scores_for_choice = scores_for_choice + self.gate.e_score_correction_bias
         group_scores = (
             scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
             .topk(min(2, self.n_routed_experts // self.n_group), dim=-1)[0]
@@ -379,6 +410,8 @@ class ChimeraPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, ChimeraTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if not module.config.load_with_bias:
+                module.e_score_correction_bias.zero_()
 
 
 @auto_docstring

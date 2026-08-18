@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from copy import deepcopy
 
 import torch
 
@@ -22,7 +23,12 @@ from transformers.utils import is_torch_available
 
 
 if is_torch_available():
-    from transformers.models.chimera.modeling_chimera import ChimeraExperts, ChimeraSparseMoeBlock
+    from transformers.models.chimera.modeling_chimera import (
+        ChimeraAttention,
+        ChimeraExperts,
+        ChimeraSparseMoeBlock,
+        ChimeraTopkRouter,
+    )
 
 
 @require_torch
@@ -68,6 +74,55 @@ class ChimeraExpertsTest(unittest.TestCase):
         self.assertEqual(config.router_aux_loss_coef, 0.0001)
         self.assertEqual(config.router_bias_update_rate, 0.001)
         self.assertEqual(config.routed_scaling_factor, 2.5)
+        self.assertTrue(config.load_with_bias)
+        self.assertFalse(config.qk_layernorm)
+
+    def test_attention_qk_layernorm_checkpoint_keys(self):
+        config = ChimeraConfig(
+            hidden_size=8,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            qk_layernorm=True,
+        )
+        attention = ChimeraAttention(config, layer_idx=0)
+        keys = set(attention.state_dict())
+
+        self.assertIn("q_norm.weight", keys)
+        self.assertIn("k_norm.weight", keys)
+
+    def test_attention_without_qk_layernorm_has_no_norm_keys(self):
+        config = ChimeraConfig(
+            hidden_size=8,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            qk_layernorm=False,
+        )
+        attention = ChimeraAttention(config, layer_idx=0)
+        keys = set(attention.state_dict())
+
+        self.assertNotIn("q_norm.weight", keys)
+        self.assertNotIn("k_norm.weight", keys)
+
+    def test_attention_forward_with_qk_layernorm(self):
+        config = ChimeraConfig(
+            hidden_size=8,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            qk_layernorm=True,
+        )
+        attention = ChimeraAttention(config, layer_idx=0)
+        hidden_states = torch.randn(2, 5, config.hidden_size)
+        position_embeddings = (
+            torch.ones(2, 5, config.head_dim),
+            torch.zeros(2, 5, config.head_dim),
+        )
+
+        output, _ = attention(hidden_states, position_embeddings)
+
+        self.assertEqual(output.shape, hidden_states.shape)
 
     def test_sparse_moe_checkpoint_keys_are_unchanged(self):
         block = ChimeraSparseMoeBlock(self.config)
@@ -75,6 +130,7 @@ class ChimeraExpertsTest(unittest.TestCase):
 
         self.assertIn("experts.0.gate_proj.weight", keys)
         self.assertIn("experts.3.down_proj.weight", keys)
+        self.assertIn("gate.e_score_correction_bias", keys)
         self.assertFalse(any("experts.experts" in key for key in keys))
 
     def test_sparse_moe_block_forward(self):
@@ -85,6 +141,66 @@ class ChimeraExpertsTest(unittest.TestCase):
 
         self.assertEqual(output.shape, hidden_states.shape)
         self.assertEqual(router_logits.shape, (10, self.config.n_routed_experts))
+
+    def test_sparse_moe_route_can_ignore_expert_bias(self):
+        router_logits = torch.tensor([[10.0, 9.0, 0.0, 0.0]])
+
+        block_with_bias = ChimeraSparseMoeBlock(self.config)
+        block_with_bias.gate.e_score_correction_bias.data = torch.tensor([0.0, 0.0, 20.0, 19.0])
+        biased_indices, _ = block_with_bias.route_tokens_to_experts(router_logits)
+
+        config_without_bias = deepcopy(self.config)
+        config_without_bias.load_with_bias = False
+        block_without_bias = ChimeraSparseMoeBlock(config_without_bias)
+        block_without_bias.gate.e_score_correction_bias.data = torch.tensor([0.0, 0.0, 20.0, 19.0])
+        unbiased_indices, _ = block_without_bias.route_tokens_to_experts(router_logits)
+
+        self.assertEqual(set(biased_indices[0].tolist()), {2, 3})
+        self.assertEqual(set(unbiased_indices[0].tolist()), {0, 1})
+
+    def test_sparse_moe_load_can_skip_expert_bias(self):
+        source_block = ChimeraSparseMoeBlock(self.config)
+        source_block.gate.e_score_correction_bias.data.fill_(3.0)
+
+        config_without_bias = deepcopy(self.config)
+        config_without_bias.load_with_bias = False
+        target_block = ChimeraSparseMoeBlock(config_without_bias)
+        self.assertNotIn("gate.e_score_correction_bias", target_block.state_dict())
+        target_block.load_state_dict(source_block.state_dict(), strict=False)
+
+        self.assertTrue(torch.equal(target_block.gate.e_score_correction_bias, torch.zeros(4)))
+
+    def test_router_load_weights_can_load_expert_bias(self):
+        router = ChimeraTopkRouter(self.config)
+        loaded_params = router.load_weights(
+            [
+                ("weight", torch.ones_like(router.weight)),
+                ("e_score_correction_bias", torch.full_like(router.e_score_correction_bias, 3.0)),
+            ]
+        )
+
+        self.assertEqual(loaded_params, {"weight", "e_score_correction_bias"})
+        self.assertTrue(torch.equal(router.weight, torch.ones_like(router.weight)))
+        self.assertTrue(
+            torch.equal(router.e_score_correction_bias, torch.full_like(router.e_score_correction_bias, 3.0))
+        )
+
+    def test_router_load_weights_can_skip_expert_bias(self):
+        config_without_bias = deepcopy(self.config)
+        config_without_bias.load_with_bias = False
+        router = ChimeraTopkRouter(config_without_bias)
+        router.e_score_correction_bias.fill_(2.0)
+
+        loaded_params = router.load_weights(
+            [
+                ("weight", torch.ones_like(router.weight)),
+                ("e_score_correction_bias", torch.full_like(router.e_score_correction_bias, 3.0)),
+            ]
+        )
+
+        self.assertEqual(loaded_params, {"weight"})
+        self.assertTrue(torch.equal(router.weight, torch.ones_like(router.weight)))
+        self.assertTrue(torch.equal(router.e_score_correction_bias, torch.zeros_like(router.e_score_correction_bias)))
 
 
 if __name__ == "__main__":
