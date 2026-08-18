@@ -35,14 +35,14 @@ class ChimeraConfig(PreTrainedConfig):
     vocab_size: int = 50176
     hidden_size: int = 2048
     intermediate_size: int = 8192
-    moe_intermediate_size: int = 1024
-    shared_expert_intermediate_size: int = 1024
+    moe_intermediate_size: int = 2048
+    shared_expert_intermediate_size: int = 0
     num_hidden_layers: int = 25
     num_attention_heads: int = 16
     num_key_value_heads: int | None = 2
     head_dim: int = 256
     hidden_act: str = "silu"
-    max_position_embeddings: int = 32768
+    max_position_embeddings: int = 8192
     original_max_position_embeddings: int = 8192
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-6
@@ -57,22 +57,26 @@ class ChimeraConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
     mlp_bias: bool = False
-    qk_layernorm: bool = False
+    qk_layernorm: bool = True
     load_with_bias: bool = True
 
     first_k_dense_replace: int = 2
     last_k_dense_replace: int = 0
-    n_routed_experts: int = 64
+    n_routed_experts: int = 32
     num_experts_per_tok: int = 4
-    n_shared_experts: int = 1
+    n_shared_experts: int = 0
     n_group: int = 1
     topk_group: int = 1
     norm_topk_prob: bool = True
     scoring_func: str = "sigmoid"
     topk_method: str = "noaux_tc"
     routed_scaling_factor: float = 2.5
-    router_aux_loss_coef: float = 0.0001
-    router_bias_update_rate: float = 0.001
+    router_aux_loss_coef: float = 0.0
+    router_z_loss_coef: float = 0.001
+    router_bias_update_rate: float = 0.0
+    router_load_balancing_type: str = "quantile_balancing"
+    moe_qb_num_bins: int = 1000
+    moe_qb_ema_decay: float = 0.0
     output_router_logits: bool = False
 
     def __post_init__(self, **kwargs):
@@ -82,7 +86,11 @@ class ChimeraConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             rope_scaling = self.rope_scaling or {
                 "type": "yarn",
-                "factor": 4.0,
+                "factor": 1.0,
+                "beta_fast": 32.0,
+                "beta_slow": 1.0,
+                "mscale": 1.0,
+                "mscale_all_dim": 0.0,
                 "original_max_position_embeddings": self.original_max_position_embeddings,
             }
             rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", "default"))
@@ -104,6 +112,16 @@ class ChimeraConfig(PreTrainedConfig):
             raise ValueError("Chimera currently supports only sigmoid MoE scoring.")
         if self.topk_method != "noaux_tc":
             raise ValueError("Chimera currently supports only noaux_tc top-k routing.")
+        if self.n_shared_experts == 0 and self.shared_expert_intermediate_size != 0:
+            raise ValueError("shared_expert_intermediate_size must be 0 when n_shared_experts is 0.")
+        if self.n_shared_experts > 0 and self.shared_expert_intermediate_size <= 0:
+            raise ValueError("shared_expert_intermediate_size must be positive when shared experts are enabled.")
+        if self.router_load_balancing_type not in {"quantile_balancing", "none"}:
+            raise ValueError("router_load_balancing_type must be 'quantile_balancing' or 'none'.")
+        if self.moe_qb_num_bins <= 0:
+            raise ValueError("moe_qb_num_bins must be positive.")
+        if not 0.0 <= self.moe_qb_ema_decay < 1.0:
+            raise ValueError("moe_qb_ema_decay must be greater than or equal to 0 and less than 1.")
 
         super().__post_init__(**kwargs)
 

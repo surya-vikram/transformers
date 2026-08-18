@@ -14,10 +14,11 @@
 
 import unittest
 from copy import deepcopy
+from tempfile import TemporaryDirectory
 
 import torch
 
-from transformers import ChimeraConfig
+from transformers import ChimeraConfig, ChimeraForCausalLM
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -38,7 +39,7 @@ class ChimeraExpertsTest(unittest.TestCase):
             hidden_size=8,
             intermediate_size=16,
             moe_intermediate_size=12,
-            shared_expert_intermediate_size=12,
+            shared_expert_intermediate_size=0,
             num_hidden_layers=3,
             num_attention_heads=2,
             num_key_value_heads=1,
@@ -46,7 +47,8 @@ class ChimeraExpertsTest(unittest.TestCase):
             first_k_dense_replace=2,
             n_routed_experts=4,
             num_experts_per_tok=2,
-            n_shared_experts=1,
+            n_shared_experts=0,
+            qk_layernorm=True,
         )
 
     def test_experts_vllm_forward_contract(self):
@@ -71,11 +73,22 @@ class ChimeraExpertsTest(unittest.TestCase):
     def test_locked_router_defaults(self):
         config = ChimeraConfig()
 
-        self.assertEqual(config.router_aux_loss_coef, 0.0001)
-        self.assertEqual(config.router_bias_update_rate, 0.001)
+        self.assertEqual(config.n_routed_experts, 32)
+        self.assertEqual(config.moe_intermediate_size, 2048)
+        self.assertEqual(config.n_shared_experts, 0)
+        self.assertEqual(config.shared_expert_intermediate_size, 0)
+        self.assertEqual(config.max_position_embeddings, 8192)
+        self.assertEqual(config.original_max_position_embeddings, 8192)
+        self.assertEqual(config.rope_parameters["factor"], 1.0)
+        self.assertEqual(config.router_aux_loss_coef, 0.0)
+        self.assertEqual(config.router_z_loss_coef, 0.001)
+        self.assertEqual(config.router_bias_update_rate, 0.0)
+        self.assertEqual(config.router_load_balancing_type, "quantile_balancing")
+        self.assertEqual(config.moe_qb_num_bins, 1000)
+        self.assertEqual(config.moe_qb_ema_decay, 0.0)
         self.assertEqual(config.routed_scaling_factor, 2.5)
         self.assertTrue(config.load_with_bias)
-        self.assertFalse(config.qk_layernorm)
+        self.assertTrue(config.qk_layernorm)
 
     def test_attention_qk_layernorm_checkpoint_keys(self):
         config = ChimeraConfig(
@@ -158,17 +171,18 @@ class ChimeraExpertsTest(unittest.TestCase):
         self.assertEqual(set(biased_indices[0].tolist()), {2, 3})
         self.assertEqual(set(unbiased_indices[0].tolist()), {0, 1})
 
-    def test_sparse_moe_load_can_skip_expert_bias(self):
+    def test_sparse_moe_load_preserves_expert_bias_when_use_is_disabled(self):
         source_block = ChimeraSparseMoeBlock(self.config)
         source_block.gate.e_score_correction_bias.data.fill_(3.0)
 
         config_without_bias = deepcopy(self.config)
         config_without_bias.load_with_bias = False
         target_block = ChimeraSparseMoeBlock(config_without_bias)
-        self.assertNotIn("gate.e_score_correction_bias", target_block.state_dict())
-        target_block.load_state_dict(source_block.state_dict(), strict=False)
+        self.assertEqual(set(source_block.state_dict()), set(target_block.state_dict()))
+        target_block.load_state_dict(source_block.state_dict(), strict=True)
 
-        self.assertTrue(torch.equal(target_block.gate.e_score_correction_bias, torch.zeros(4)))
+        self.assertTrue(torch.equal(target_block.gate.e_score_correction_bias, torch.full((4,), 3.0)))
+        self.assertFalse(target_block.gate.e_score_correction_bias.requires_grad)
 
     def test_router_load_weights_can_load_expert_bias(self):
         router = ChimeraTopkRouter(self.config)
@@ -185,7 +199,7 @@ class ChimeraExpertsTest(unittest.TestCase):
             torch.equal(router.e_score_correction_bias, torch.full_like(router.e_score_correction_bias, 3.0))
         )
 
-    def test_router_load_weights_can_skip_expert_bias(self):
+    def test_router_load_weights_preserves_expert_bias_when_use_is_disabled(self):
         config_without_bias = deepcopy(self.config)
         config_without_bias.load_with_bias = False
         router = ChimeraTopkRouter(config_without_bias)
@@ -198,9 +212,54 @@ class ChimeraExpertsTest(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(loaded_params, {"weight"})
+        self.assertEqual(loaded_params, {"weight", "e_score_correction_bias"})
         self.assertTrue(torch.equal(router.weight, torch.ones_like(router.weight)))
-        self.assertTrue(torch.equal(router.e_score_correction_bias, torch.zeros_like(router.e_score_correction_bias)))
+        self.assertTrue(
+            torch.equal(router.e_score_correction_bias, torch.full_like(router.e_score_correction_bias, 3.0))
+        )
+
+    def test_router_strict_load_rejects_missing_expert_bias(self):
+        router = ChimeraTopkRouter(self.config)
+
+        with self.assertRaisesRegex(RuntimeError, "e_score_correction_bias"):
+            router.load_state_dict({"weight": torch.ones_like(router.weight)}, strict=True)
+
+    def test_from_pretrained_rejects_missing_expert_bias_in_both_modes(self):
+        config = deepcopy(self.config)
+        config.vocab_size = 32
+        model = ChimeraForCausalLM(config)
+        state_dict = model.state_dict()
+        missing_key = next(key for key in state_dict if key.endswith(".gate.e_score_correction_bias"))
+        state_dict.pop(missing_key)
+
+        for load_with_bias in (True, False):
+            load_config = deepcopy(config)
+            load_config.load_with_bias = load_with_bias
+            with self.subTest(load_with_bias=load_with_bias):
+                with self.assertRaisesRegex(RuntimeError, missing_key):
+                    ChimeraForCausalLM.from_pretrained(None, config=load_config, state_dict=state_dict)
+
+    def test_model_save_reload_keeps_identical_weights_when_bias_use_is_disabled(self):
+        config = deepcopy(self.config)
+        config.vocab_size = 32
+        model = ChimeraForCausalLM(config)
+        for module in model.modules():
+            if isinstance(module, ChimeraTopkRouter):
+                module.e_score_correction_bias.data.copy_(
+                    torch.arange(config.n_routed_experts, dtype=module.e_score_correction_bias.dtype)
+                )
+
+        with TemporaryDirectory() as tmpdir:
+            model.save_pretrained(tmpdir)
+            disabled_config = ChimeraConfig.from_pretrained(tmpdir)
+            disabled_config.load_with_bias = False
+            reloaded = ChimeraForCausalLM.from_pretrained(tmpdir, config=disabled_config)
+
+        source_state = model.state_dict()
+        reloaded_state = reloaded.state_dict()
+        self.assertEqual(set(source_state), set(reloaded_state))
+        for key in source_state:
+            self.assertTrue(torch.equal(source_state[key], reloaded_state[key]), key)
 
 
 if __name__ == "__main__":

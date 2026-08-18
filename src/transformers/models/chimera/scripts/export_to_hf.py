@@ -69,6 +69,18 @@ def parse_args() -> argparse.Namespace:
         help="Instantiate the model on meta device and skip weights.",
     )
     mode.add_argument("--random-init", action="store_true", help="Instantiate random weights and save them.")
+    parser.add_argument(
+        "--load-with-bias",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use the checkpointed router bias during expert selection. The bias tensors are always saved.",
+    )
+    parser.add_argument(
+        "--profile",
+        choices=("full", "tiny"),
+        default="full",
+        help="Export the full canonical architecture or its reduced canonical smoke-test profile.",
+    )
     parser.add_argument("--dtype", default="bfloat16", choices=("float32", "float16", "bfloat16"))
     parser.add_argument("--max-shard-size", default="5GB", help="Shard size used when --random-init saves weights.")
     return parser.parse_args()
@@ -152,10 +164,7 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
         "additional_special_tokens", []
     )
     if configured_special_tokens != CHIMERA_ADDITIONAL_SPECIAL_TOKENS:
-        raise ValueError(
-            "Unexpected Chimera additional special tokens: "
-            f"{configured_special_tokens}"
-        )
+        raise ValueError(f"Unexpected Chimera additional special tokens: {configured_special_tokens}")
     missing_special_tokens = [
         token for token in CHIMERA_ADDITIONAL_SPECIAL_TOKENS if token not in tokenizer.all_special_tokens
     ]
@@ -166,7 +175,7 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
     tokenizer.eos_token = "<EOS>"
     tokenizer.pad_token = "<EOS>"
     tokenizer.chat_template = CHIMERA_CHAT_TEMPLATE
-    tokenizer.model_max_length = 32768
+    tokenizer.model_max_length = 8192
 
     tokenizer.save_pretrained(output)
     (output / "chat_template.jinja").write_text(CHIMERA_CHAT_TEMPLATE + "\n", encoding="utf-8")
@@ -175,7 +184,7 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
         {
             "bos_token": "<BOS>",
             "eos_token": "<EOS>",
-            "model_max_length": 32768,
+            "model_max_length": 8192,
             "pad_token": "<EOS>",
             "additional_special_tokens": CHIMERA_ADDITIONAL_SPECIAL_TOKENS,
             "chat_template": CHIMERA_CHAT_TEMPLATE,
@@ -194,38 +203,69 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
     return tokenizer
 
 
-def build_config() -> ChimeraConfig:
+def build_config(*, load_with_bias: bool = True, profile: str = "full") -> ChimeraConfig:
+    profile_fields = {
+        "full": {
+            "hidden_size": 2048,
+            "intermediate_size": 8192,
+            "moe_intermediate_size": 2048,
+            "num_hidden_layers": 25,
+            "num_attention_heads": 16,
+            "num_key_value_heads": 2,
+            "head_dim": 256,
+            "first_k_dense_replace": 2,
+            "n_routed_experts": 32,
+            "num_experts_per_tok": 4,
+        },
+        "tiny": {
+            "hidden_size": 512,
+            "intermediate_size": 2048,
+            "moe_intermediate_size": 256,
+            "num_hidden_layers": 8,
+            "num_attention_heads": 8,
+            "num_key_value_heads": 2,
+            "head_dim": 64,
+            "first_k_dense_replace": 2,
+            "n_routed_experts": 8,
+            "num_experts_per_tok": 2,
+        },
+    }[profile]
     config = ChimeraConfig(
         vocab_size=50176,
         bos_token_id=0,
         eos_token_id=1,
         pad_token_id=1,
         tie_word_embeddings=False,
-        hidden_size=2048,
-        num_hidden_layers=25,
-        num_attention_heads=16,
-        num_key_value_heads=2,
-        head_dim=256,
-        first_k_dense_replace=2,
         last_k_dense_replace=0,
-        intermediate_size=8192,
-        n_routed_experts=64,
-        num_experts_per_tok=4,
-        n_shared_experts=1,
-        moe_intermediate_size=1024,
-        shared_expert_intermediate_size=1024,
-        max_position_embeddings=32768,
+        n_shared_experts=0,
+        shared_expert_intermediate_size=0,
+        max_position_embeddings=8192,
         original_max_position_embeddings=8192,
         rope_theta=10000000.0,
-        rope_scaling={"type": "yarn", "factor": 4.0, "original_max_position_embeddings": 8192},
+        rope_scaling={
+            "type": "yarn",
+            "factor": 1.0,
+            "beta_fast": 32.0,
+            "beta_slow": 1.0,
+            "mscale": 1.0,
+            "mscale_all_dim": 0.0,
+            "original_max_position_embeddings": 8192,
+        },
+        qk_layernorm=True,
         scoring_func="sigmoid",
         topk_method="noaux_tc",
         norm_topk_prob=True,
-        router_aux_loss_coef=0.0001,
-        router_bias_update_rate=0.001,
+        router_aux_loss_coef=0.0,
+        router_z_loss_coef=0.001,
+        router_bias_update_rate=0.0,
+        router_load_balancing_type="quantile_balancing",
+        moe_qb_num_bins=1000,
+        moe_qb_ema_decay=0.0,
         routed_scaling_factor=2.5,
         n_group=1,
         topk_group=1,
+        load_with_bias=load_with_bias,
+        **profile_fields,
     )
     config.architectures = ["ChimeraForCausalLM"]
     return config
@@ -262,6 +302,9 @@ This export keeps the tokenizer vocabulary size fixed while assigning reserved t
 pretraining document separator, generation EOS, and padding token. Chat inference may additionally stop
 on `<end_of_turn>`.
 
+Router expert-bias tensors are always part of the checkpoint. Set `load_with_bias=true` for canonical
+parity or `load_with_bias=false` to bypass the frozen bias during expert selection without changing weights.
+
 The chat template is a minimal non-reasoning, non-tool-calling turn format:
 
 ```text
@@ -293,7 +336,7 @@ def main() -> None:
     output = args.output
     output.mkdir(parents=True, exist_ok=True)
 
-    config = build_config()
+    config = build_config(load_with_bias=args.load_with_bias, profile=args.profile)
     config.save_pretrained(output)
     write_generation_config(output)
     write_readme(output)

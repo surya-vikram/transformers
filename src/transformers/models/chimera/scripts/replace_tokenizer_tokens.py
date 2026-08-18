@@ -163,7 +163,7 @@ def update_tokenizer_artifacts(tokenizer_dir: Path, replacement_ids: dict[str, i
         {
             "additional_special_tokens": additional_special_tokens,
             "chat_template": CHAT_TEMPLATE,
-            "model_max_length": 32768,
+            "model_max_length": 8192,
             "tokenizer_class": "PreTrainedTokenizerFast",
         }
     )
@@ -231,9 +231,7 @@ def validate_tokenizer(
 
     if tokenizer.unk_token is not None:
         raise ValueError(f"Expected no unknown token, found {tokenizer.unk_token!r}")
-    configured_special_tokens = read_json(tokenizer_dir / "tokenizer_config.json").get(
-        "additional_special_tokens", []
-    )
+    configured_special_tokens = read_json(tokenizer_dir / "tokenizer_config.json").get("additional_special_tokens", [])
     if configured_special_tokens != additional_special_tokens:
         raise ValueError(
             "Unexpected additional special token metadata: "

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,6 +36,12 @@ def parse_args() -> argparse.Namespace:
         help="Optional Transformers device map, such as 'auto'. Requires accelerate when set.",
     )
     parser.add_argument("--stream", action="store_true")
+    parser.add_argument(
+        "--expect-load-with-bias",
+        choices=("true", "false"),
+        default=None,
+        help="Fail unless the model config has the expected router-bias usage mode.",
+    )
     return parser.parse_args()
 
 
@@ -74,11 +80,29 @@ def prepare_inputs(tokenizer, prompt: str, args: argparse.Namespace):
 def main() -> None:
     args = parse_args()
     tokenizer = load_tokenizer(args.model)
+    config = AutoConfig.from_pretrained(args.model)
+    load_with_bias = getattr(config, "load_with_bias", True)
+    if args.expect_load_with_bias is not None:
+        expected = args.expect_load_with_bias == "true"
+        if load_with_bias is not expected:
+            raise ValueError(f"Expected load_with_bias={expected}, found {load_with_bias}")
+    print(f"load_with_bias={load_with_bias}; router bias tensors remain loaded in both modes")
     dtype = getattr(torch, args.dtype)
     model_kwargs = {"dtype": dtype}
     if args.device_map is not None:
         model_kwargs["device_map"] = args.device_map
     model = AutoModelForCausalLM.from_pretrained(args.model, **model_kwargs)
+    router_biases = {
+        name: parameter
+        for name, parameter in model.named_parameters()
+        if name.endswith(".gate.e_score_correction_bias")
+    }
+    expected_biases = config.num_hidden_layers - config.first_k_dense_replace - config.last_k_dense_replace
+    if len(router_biases) != expected_biases:
+        raise RuntimeError(f"Expected {expected_biases} router bias tensors, found {len(router_biases)}")
+    if any(parameter.requires_grad for parameter in router_biases.values()):
+        raise RuntimeError("Router correction biases must be frozen during inference")
+    print(f"loaded_router_bias_tensors={len(router_biases)} frozen=true")
     prompt = resolve_prompt(args)
     inputs = prepare_inputs(tokenizer, prompt, args)
     inputs = {key: value.to(model.device) for key, value in inputs.items()}

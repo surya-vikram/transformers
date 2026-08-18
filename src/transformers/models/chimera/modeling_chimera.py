@@ -226,17 +226,7 @@ class ChimeraTopkRouter(nn.Module):
         super().__init__()
         self.config = config
         self.weight = nn.Parameter(torch.empty((config.n_routed_experts, config.hidden_size)))
-        if config.load_with_bias:
-            self.e_score_correction_bias = nn.Parameter(torch.zeros(config.n_routed_experts))
-        else:
-            self.register_buffer(
-                "e_score_correction_bias", torch.zeros(config.n_routed_experts), persistent=False
-            )
-        self._register_load_state_dict_pre_hook(self.load_hook)
-
-    def load_hook(self, state_dict, prefix, *args):
-        if not self.config.load_with_bias:
-            state_dict.pop(f"{prefix}e_score_correction_bias", None)
+        self.e_score_correction_bias = nn.Parameter(torch.zeros(config.n_routed_experts), requires_grad=False)
 
     def load_weights(self, weights):
         loaded_params = set()
@@ -246,11 +236,8 @@ class ChimeraTopkRouter(nn.Module):
                     self.weight.copy_(loaded_weight)
                     loaded_params.add(name)
                 elif name == "e_score_correction_bias":
-                    if self.config.load_with_bias:
-                        self.e_score_correction_bias.copy_(loaded_weight)
-                        loaded_params.add(name)
-                    else:
-                        self.e_score_correction_bias.zero_()
+                    self.e_score_correction_bias.copy_(loaded_weight)
+                    loaded_params.add(name)
                 else:
                     raise ValueError(f"Unexpected ChimeraTopkRouter weight: {name}")
         return loaded_params
@@ -410,8 +397,17 @@ class ChimeraPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, ChimeraTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if not module.config.load_with_bias:
-                module.e_score_correction_bias.zero_()
+
+    def _adjust_missing_and_unexpected_keys(self, loading_info):
+        super()._adjust_missing_and_unexpected_keys(loading_info)
+        missing_router_biases = sorted(
+            key for key in loading_info.missing_keys if key.endswith(".gate.e_score_correction_bias")
+        )
+        if missing_router_biases:
+            raise RuntimeError(
+                "Chimera checkpoints must contain every router e_score_correction_bias tensor; "
+                f"missing keys: {missing_router_biases}"
+            )
 
 
 @auto_docstring
