@@ -227,6 +227,11 @@ class ChimeraTopkRouter(nn.Module):
         self.config = config
         self.weight = nn.Parameter(torch.empty((config.n_routed_experts, config.hidden_size)))
         self.e_score_correction_bias = nn.Parameter(torch.zeros(config.n_routed_experts))
+        self._register_load_state_dict_pre_hook(self.load_hook)
+
+    def load_hook(self, state_dict, prefix, *args):
+        if not self.config.load_with_bias:
+            state_dict.pop(f"{prefix}e_score_correction_bias", None)
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.config.hidden_size)
@@ -282,7 +287,9 @@ class ChimeraSparseMoeBlock(nn.Module):
 
     def route_tokens_to_experts(self, router_logits):
         router_scores = router_logits.sigmoid()
-        scores_for_choice = router_scores + self.gate.e_score_correction_bias
+        scores_for_choice = router_scores
+        if self.config.load_with_bias:
+            scores_for_choice = scores_for_choice + self.gate.e_score_correction_bias
         group_scores = (
             scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
             .topk(min(2, self.n_routed_experts // self.n_group), dim=-1)[0]

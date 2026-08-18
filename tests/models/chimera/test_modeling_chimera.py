@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from copy import deepcopy
 
 import torch
 
@@ -68,6 +69,7 @@ class ChimeraExpertsTest(unittest.TestCase):
         self.assertEqual(config.router_aux_loss_coef, 0.0001)
         self.assertEqual(config.router_bias_update_rate, 0.001)
         self.assertEqual(config.routed_scaling_factor, 2.5)
+        self.assertTrue(config.load_with_bias)
         self.assertFalse(config.qk_layernorm)
 
     def test_attention_qk_layernorm_checkpoint_keys(self):
@@ -123,6 +125,7 @@ class ChimeraExpertsTest(unittest.TestCase):
 
         self.assertIn("experts.0.gate_proj.weight", keys)
         self.assertIn("experts.3.down_proj.weight", keys)
+        self.assertIn("gate.e_score_correction_bias", keys)
         self.assertFalse(any("experts.experts" in key for key in keys))
 
     def test_sparse_moe_block_forward(self):
@@ -133,6 +136,33 @@ class ChimeraExpertsTest(unittest.TestCase):
 
         self.assertEqual(output.shape, hidden_states.shape)
         self.assertEqual(router_logits.shape, (10, self.config.n_routed_experts))
+
+    def test_sparse_moe_route_can_ignore_expert_bias(self):
+        router_logits = torch.tensor([[10.0, 9.0, 0.0, 0.0]])
+
+        block_with_bias = ChimeraSparseMoeBlock(self.config)
+        block_with_bias.gate.e_score_correction_bias.data = torch.tensor([0.0, 0.0, 20.0, 19.0])
+        biased_indices, _ = block_with_bias.route_tokens_to_experts(router_logits)
+
+        config_without_bias = deepcopy(self.config)
+        config_without_bias.load_with_bias = False
+        block_without_bias = ChimeraSparseMoeBlock(config_without_bias)
+        block_without_bias.gate.e_score_correction_bias.data = torch.tensor([0.0, 0.0, 20.0, 19.0])
+        unbiased_indices, _ = block_without_bias.route_tokens_to_experts(router_logits)
+
+        self.assertEqual(set(biased_indices[0].tolist()), {2, 3})
+        self.assertEqual(set(unbiased_indices[0].tolist()), {0, 1})
+
+    def test_sparse_moe_load_can_skip_expert_bias(self):
+        source_block = ChimeraSparseMoeBlock(self.config)
+        source_block.gate.e_score_correction_bias.data.fill_(3.0)
+
+        config_without_bias = deepcopy(self.config)
+        config_without_bias.load_with_bias = False
+        target_block = ChimeraSparseMoeBlock(config_without_bias)
+        target_block.load_state_dict(source_block.state_dict(), strict=False)
+
+        self.assertTrue(torch.equal(target_block.gate.e_score_correction_bias, torch.zeros(4)))
 
 
 if __name__ == "__main__":
