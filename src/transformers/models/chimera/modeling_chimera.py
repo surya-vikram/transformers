@@ -228,6 +228,13 @@ class ChimeraTopkRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty((config.n_routed_experts, config.hidden_size)))
         self.e_score_correction_bias = nn.Parameter(torch.zeros(config.n_routed_experts), requires_grad=False)
 
+    def _apply(self, fn, recurse=True):
+        """Keep checkpointed router corrections in the MCore-native FP32 dtype."""
+        super()._apply(fn, recurse=recurse)
+        if self.e_score_correction_bias.dtype != torch.float32:
+            self.e_score_correction_bias.data = self.e_score_correction_bias.data.float()
+        return self
+
     def load_weights(self, weights):
         loaded_params = set()
         with torch.no_grad():

@@ -199,6 +199,21 @@ class ChimeraExpertsTest(unittest.TestCase):
             torch.equal(router.e_score_correction_bias, torch.full_like(router.e_score_correction_bias, 3.0))
         )
 
+    def test_router_bias_stays_float32_when_model_uses_bfloat16(self):
+        router = ChimeraTopkRouter(self.config)
+        router.e_score_correction_bias.data.copy_(torch.arange(self.config.n_routed_experts))
+
+        router.to(dtype=torch.bfloat16)
+
+        self.assertEqual(router.weight.dtype, torch.bfloat16)
+        self.assertEqual(router.e_score_correction_bias.dtype, torch.float32)
+        self.assertTrue(
+            torch.equal(
+                router.e_score_correction_bias,
+                torch.arange(self.config.n_routed_experts, dtype=torch.float32),
+            )
+        )
+
     def test_router_load_weights_preserves_expert_bias_when_use_is_disabled(self):
         config_without_bias = deepcopy(self.config)
         config_without_bias.load_with_bias = False
