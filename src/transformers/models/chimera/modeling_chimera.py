@@ -238,6 +238,23 @@ class ChimeraTopkRouter(nn.Module):
         if not self.config.load_with_bias:
             state_dict.pop(f"{prefix}e_score_correction_bias", None)
 
+    def load_weights(self, weights):
+        loaded_params = set()
+        with torch.no_grad():
+            for name, loaded_weight in weights:
+                if name == "weight":
+                    self.weight.copy_(loaded_weight)
+                    loaded_params.add(name)
+                elif name == "e_score_correction_bias":
+                    if self.config.load_with_bias:
+                        self.e_score_correction_bias.copy_(loaded_weight)
+                        loaded_params.add(name)
+                    else:
+                        self.e_score_correction_bias.zero_()
+                else:
+                    raise ValueError(f"Unexpected ChimeraTopkRouter weight: {name}")
+        return loaded_params
+
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.config.hidden_size)
         return F.linear(hidden_states.float(), self.weight.float())

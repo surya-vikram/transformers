@@ -23,7 +23,12 @@ from transformers.utils import is_torch_available
 
 
 if is_torch_available():
-    from transformers.models.chimera.modeling_chimera import ChimeraAttention, ChimeraExperts, ChimeraSparseMoeBlock
+    from transformers.models.chimera.modeling_chimera import (
+        ChimeraAttention,
+        ChimeraExperts,
+        ChimeraSparseMoeBlock,
+        ChimeraTopkRouter,
+    )
 
 
 @require_torch
@@ -164,6 +169,38 @@ class ChimeraExpertsTest(unittest.TestCase):
         target_block.load_state_dict(source_block.state_dict(), strict=False)
 
         self.assertTrue(torch.equal(target_block.gate.e_score_correction_bias, torch.zeros(4)))
+
+    def test_router_load_weights_can_load_expert_bias(self):
+        router = ChimeraTopkRouter(self.config)
+        loaded_params = router.load_weights(
+            [
+                ("weight", torch.ones_like(router.weight)),
+                ("e_score_correction_bias", torch.full_like(router.e_score_correction_bias, 3.0)),
+            ]
+        )
+
+        self.assertEqual(loaded_params, {"weight", "e_score_correction_bias"})
+        self.assertTrue(torch.equal(router.weight, torch.ones_like(router.weight)))
+        self.assertTrue(
+            torch.equal(router.e_score_correction_bias, torch.full_like(router.e_score_correction_bias, 3.0))
+        )
+
+    def test_router_load_weights_can_skip_expert_bias(self):
+        config_without_bias = deepcopy(self.config)
+        config_without_bias.load_with_bias = False
+        router = ChimeraTopkRouter(config_without_bias)
+        router.e_score_correction_bias.fill_(2.0)
+
+        loaded_params = router.load_weights(
+            [
+                ("weight", torch.ones_like(router.weight)),
+                ("e_score_correction_bias", torch.full_like(router.e_score_correction_bias, 3.0)),
+            ]
+        )
+
+        self.assertEqual(loaded_params, {"weight"})
+        self.assertTrue(torch.equal(router.weight, torch.ones_like(router.weight)))
+        self.assertTrue(torch.equal(router.e_score_correction_bias, torch.zeros_like(router.e_score_correction_bias)))
 
 
 if __name__ == "__main__":
