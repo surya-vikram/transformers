@@ -15,8 +15,14 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, TextSt
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=Path, required=True, help="Path to Chimera HF model directory.")
-    parser.add_argument("--prompt", default=None, help="Prompt text.")
-    parser.add_argument("--prompt-file", type=Path, default=None, help="File containing prompt text.")
+    prompt_group = parser.add_mutually_exclusive_group(required=True)
+    prompt_group.add_argument("--prompt", default=None, help="Prompt text.")
+    prompt_group.add_argument("--prompt-file", type=Path, default=None, help="File containing prompt text.")
+    prompt_group.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Prompt repeatedly without retaining conversation history. Use /exit or /quit to stop.",
+    )
     parser.add_argument("--chat", action="store_true", help="Render the prompt as a Chimera user turn.")
     parser.add_argument("--system-prompt", default=None, help="Optional system message used with --chat.")
     parser.add_argument(
@@ -28,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--top-k", type=int, default=50)
+    parser.add_argument("--repetition-penalty", type=float, default=1.0)
     parser.add_argument("--do-sample", action="store_true")
     parser.add_argument("--dtype", default="bfloat16", choices=("float32", "float16", "bfloat16"))
     parser.add_argument(
@@ -36,6 +43,12 @@ def parse_args() -> argparse.Namespace:
         help="Optional Transformers device map, such as 'auto'. Requires accelerate when set.",
     )
     parser.add_argument("--stream", action="store_true")
+    parser.add_argument(
+        "--load-with-bias",
+        choices=("true", "false"),
+        default=None,
+        help="Override whether routing applies the frozen router correction bias.",
+    )
     parser.add_argument(
         "--expect-load-with-bias",
         choices=("true", "false"),
@@ -77,36 +90,7 @@ def prepare_inputs(tokenizer, prompt: str, args: argparse.Namespace):
     return tokenizer(rendered, add_special_tokens=False, return_tensors="pt")
 
 
-def main() -> None:
-    args = parse_args()
-    tokenizer = load_tokenizer(args.model)
-    config = AutoConfig.from_pretrained(args.model)
-    load_with_bias = getattr(config, "load_with_bias", True)
-    if args.expect_load_with_bias is not None:
-        expected = args.expect_load_with_bias == "true"
-        if load_with_bias is not expected:
-            raise ValueError(f"Expected load_with_bias={expected}, found {load_with_bias}")
-    print(f"load_with_bias={load_with_bias}; router bias tensors remain loaded in both modes")
-    dtype = getattr(torch, args.dtype)
-    model_kwargs = {"dtype": dtype}
-    if args.device_map is not None:
-        model_kwargs["device_map"] = args.device_map
-    model = AutoModelForCausalLM.from_pretrained(args.model, **model_kwargs)
-    router_biases = {
-        name: parameter
-        for name, parameter in model.named_parameters()
-        if name.endswith(".gate.e_score_correction_bias")
-    }
-    expected_biases = config.num_hidden_layers - config.first_k_dense_replace - config.last_k_dense_replace
-    if len(router_biases) != expected_biases:
-        raise RuntimeError(f"Expected {expected_biases} router bias tensors, found {len(router_biases)}")
-    if any(parameter.requires_grad for parameter in router_biases.values()):
-        raise RuntimeError("Router correction biases must be frozen during inference")
-    router_bias_dtypes = {parameter.dtype for parameter in router_biases.values()}
-    if router_bias_dtypes != {torch.float32}:
-        raise RuntimeError(f"Router correction biases must load in float32, found {router_bias_dtypes}")
-    print(f"loaded_router_bias_tensors={len(router_biases)} frozen=true dtype=float32")
-    prompt = resolve_prompt(args)
+def generate_response(model, tokenizer, prompt: str, args: argparse.Namespace) -> str | None:
     inputs = prepare_inputs(tokenizer, prompt, args)
     inputs = {key: value.to(model.device) for key, value in inputs.items()}
     streamer = (
@@ -121,20 +105,82 @@ def main() -> None:
     stop_ids = [tokenizer.eos_token_id]
     if args.chat:
         stop_ids.append(tokenizer.convert_tokens_to_ids("<end_of_turn>"))
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=args.max_new_tokens,
-        do_sample=args.do_sample,
-        temperature=args.temperature,
-        top_p=args.top_p,
-        top_k=args.top_k,
-        streamer=streamer,
-        pad_token_id=tokenizer.pad_token_id,
-        eos_token_id=stop_ids,
-    )
-    if not args.stream:
-        generated = outputs[0, inputs["input_ids"].shape[1] :]
-        print(tokenizer.decode(generated, skip_special_tokens=not args.show_special_tokens))
+    generation_kwargs = {
+        "max_new_tokens": args.max_new_tokens,
+        "do_sample": args.do_sample,
+        "streamer": streamer,
+        "pad_token_id": tokenizer.pad_token_id,
+        "eos_token_id": stop_ids,
+        "repetition_penalty": args.repetition_penalty,
+    }
+    if args.do_sample:
+        generation_kwargs.update(temperature=args.temperature, top_p=args.top_p, top_k=args.top_k)
+    with torch.inference_mode():
+        outputs = model.generate(**inputs, **generation_kwargs)
+    if args.stream:
+        return None
+    generated = outputs[0, inputs["input_ids"].shape[1] :]
+    return tokenizer.decode(generated, skip_special_tokens=not args.show_special_tokens)
+
+
+def run_interactive(model, tokenizer, args: argparse.Namespace) -> None:
+    print("Stateless interactive mode. Each prompt is independent; use /exit or /quit to stop.")
+    while True:
+        try:
+            prompt = input("User> ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if prompt.strip().lower() in {"/exit", "/quit"}:
+            break
+        if not prompt.strip():
+            continue
+        if args.stream:
+            print("Assistant> ", end="", flush=True)
+            generate_response(model, tokenizer, prompt, args)
+        else:
+            response = generate_response(model, tokenizer, prompt, args)
+            print(f"Assistant> {response}")
+
+
+def main() -> None:
+    args = parse_args()
+    tokenizer = load_tokenizer(args.model)
+    config = AutoConfig.from_pretrained(args.model)
+    if args.load_with_bias is not None:
+        config.load_with_bias = args.load_with_bias == "true"
+    load_with_bias = getattr(config, "load_with_bias", True)
+    if args.expect_load_with_bias is not None:
+        expected = args.expect_load_with_bias == "true"
+        if load_with_bias is not expected:
+            raise ValueError(f"Expected load_with_bias={expected}, found {load_with_bias}")
+    print(f"load_with_bias={load_with_bias}; router bias tensors remain loaded in both modes")
+    dtype = getattr(torch, args.dtype)
+    model_kwargs = {"config": config, "dtype": dtype}
+    if args.device_map is not None:
+        model_kwargs["device_map"] = args.device_map
+    model = AutoModelForCausalLM.from_pretrained(args.model, **model_kwargs)
+    model.eval()
+    router_biases = {
+        name: parameter
+        for name, parameter in model.named_parameters()
+        if name.endswith(".gate.e_score_correction_bias")
+    }
+    expected_biases = config.num_hidden_layers - config.first_k_dense_replace - config.last_k_dense_replace
+    if len(router_biases) != expected_biases:
+        raise RuntimeError(f"Expected {expected_biases} router bias tensors, found {len(router_biases)}")
+    if any(parameter.requires_grad for parameter in router_biases.values()):
+        raise RuntimeError("Router correction biases must be frozen during inference")
+    router_bias_dtypes = {parameter.dtype for parameter in router_biases.values()}
+    if router_bias_dtypes != {torch.float32}:
+        raise RuntimeError(f"Router correction biases must load in float32, found {router_bias_dtypes}")
+    print(f"loaded_router_bias_tensors={len(router_biases)} frozen=true dtype=float32")
+    if args.interactive:
+        run_interactive(model, tokenizer, args)
+        return
+    response = generate_response(model, tokenizer, resolve_prompt(args), args)
+    if response is not None:
+        print(response)
 
 
 if __name__ == "__main__":
