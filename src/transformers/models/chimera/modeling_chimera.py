@@ -226,7 +226,12 @@ class ChimeraTopkRouter(nn.Module):
         super().__init__()
         self.config = config
         self.weight = nn.Parameter(torch.empty((config.n_routed_experts, config.hidden_size)))
-        self.e_score_correction_bias = nn.Parameter(torch.zeros(config.n_routed_experts))
+        if config.load_with_bias:
+            self.e_score_correction_bias = nn.Parameter(torch.zeros(config.n_routed_experts))
+        else:
+            self.register_buffer(
+                "e_score_correction_bias", torch.zeros(config.n_routed_experts), persistent=False
+            )
         self._register_load_state_dict_pre_hook(self.load_hook)
 
     def load_hook(self, state_dict, prefix, *args):
@@ -388,6 +393,8 @@ class ChimeraPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, ChimeraTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if not module.config.load_with_bias:
+                module.e_score_correction_bias.zero_()
 
 
 @auto_docstring

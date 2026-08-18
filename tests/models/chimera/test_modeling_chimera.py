@@ -160,6 +160,7 @@ class ChimeraExpertsTest(unittest.TestCase):
         config_without_bias = deepcopy(self.config)
         config_without_bias.load_with_bias = False
         target_block = ChimeraSparseMoeBlock(config_without_bias)
+        self.assertNotIn("gate.e_score_correction_bias", target_block.state_dict())
         target_block.load_state_dict(source_block.state_dict(), strict=False)
 
         self.assertTrue(torch.equal(target_block.gate.e_score_correction_bias, torch.zeros(4)))
