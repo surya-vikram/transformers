@@ -22,7 +22,7 @@ from transformers.utils import is_torch_available
 
 
 if is_torch_available():
-    from transformers.models.chimera.modeling_chimera import ChimeraExperts, ChimeraSparseMoeBlock
+    from transformers.models.chimera.modeling_chimera import ChimeraAttention, ChimeraExperts, ChimeraSparseMoeBlock
 
 
 @require_torch
@@ -68,6 +68,54 @@ class ChimeraExpertsTest(unittest.TestCase):
         self.assertEqual(config.router_aux_loss_coef, 0.0001)
         self.assertEqual(config.router_bias_update_rate, 0.001)
         self.assertEqual(config.routed_scaling_factor, 2.5)
+        self.assertFalse(config.qk_layernorm)
+
+    def test_attention_qk_layernorm_checkpoint_keys(self):
+        config = ChimeraConfig(
+            hidden_size=8,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            qk_layernorm=True,
+        )
+        attention = ChimeraAttention(config, layer_idx=0)
+        keys = set(attention.state_dict())
+
+        self.assertIn("q_norm.weight", keys)
+        self.assertIn("k_norm.weight", keys)
+
+    def test_attention_without_qk_layernorm_has_no_norm_keys(self):
+        config = ChimeraConfig(
+            hidden_size=8,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            qk_layernorm=False,
+        )
+        attention = ChimeraAttention(config, layer_idx=0)
+        keys = set(attention.state_dict())
+
+        self.assertNotIn("q_norm.weight", keys)
+        self.assertNotIn("k_norm.weight", keys)
+
+    def test_attention_forward_with_qk_layernorm(self):
+        config = ChimeraConfig(
+            hidden_size=8,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            qk_layernorm=True,
+        )
+        attention = ChimeraAttention(config, layer_idx=0)
+        hidden_states = torch.randn(2, 5, config.hidden_size)
+        position_embeddings = (
+            torch.ones(2, 5, config.head_dim),
+            torch.zeros(2, 5, config.head_dim),
+        )
+
+        output, _ = attention(hidden_states, position_embeddings)
+
+        self.assertEqual(output.shape, hidden_states.shape)
 
     def test_sparse_moe_checkpoint_keys_are_unchanged(self):
         block = ChimeraSparseMoeBlock(self.config)

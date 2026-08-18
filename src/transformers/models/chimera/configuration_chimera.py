@@ -57,6 +57,7 @@ class ChimeraConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
     mlp_bias: bool = False
+    qk_layernorm: bool = False
 
     first_k_dense_replace: int = 2
     last_k_dense_replace: int = 0
