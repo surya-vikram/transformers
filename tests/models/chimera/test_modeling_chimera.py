@@ -199,6 +199,22 @@ class ChimeraExpertsTest(unittest.TestCase):
             torch.equal(router.e_score_correction_bias, torch.full_like(router.e_score_correction_bias, 3.0))
         )
 
+    def test_router_load_weights_restores_exact_fp32_frozen_expert_bias(self):
+        router = ChimeraTopkRouter(self.config)
+        original_device = router.e_score_correction_bias.device
+        router.e_score_correction_bias.data = router.e_score_correction_bias.data.to(torch.bfloat16)
+        router.e_score_correction_bias.requires_grad_(True)
+        checkpoint_bias = torch.tensor([0.12345679, -0.9876543, 0.33333334, -0.14285715])
+        self.assertFalse(torch.equal(checkpoint_bias, checkpoint_bias.to(torch.bfloat16).float()))
+
+        loaded_params = router.load_weights([("e_score_correction_bias", checkpoint_bias)])
+
+        self.assertEqual(loaded_params, {"e_score_correction_bias"})
+        self.assertEqual(router.e_score_correction_bias.device, original_device)
+        self.assertEqual(router.e_score_correction_bias.dtype, torch.float32)
+        self.assertFalse(router.e_score_correction_bias.requires_grad)
+        self.assertTrue(torch.equal(router.e_score_correction_bias, checkpoint_bias))
+
     def test_router_bias_stays_float32_when_model_uses_bfloat16(self):
         router = ChimeraTopkRouter(self.config)
         router.e_score_correction_bias.data.copy_(torch.arange(self.config.n_routed_experts))

@@ -243,6 +243,10 @@ class ChimeraTopkRouter(nn.Module):
                     self.weight.copy_(loaded_weight)
                     loaded_params.add(name)
                 elif name == "e_score_correction_bias":
+                    self.e_score_correction_bias.data = torch.empty_like(
+                        self.e_score_correction_bias, dtype=torch.float32
+                    )
+                    self.e_score_correction_bias.requires_grad_(False)
                     self.e_score_correction_bias.copy_(loaded_weight)
                     loaded_params.add(name)
                 else:
