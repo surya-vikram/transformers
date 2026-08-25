@@ -252,6 +252,7 @@ def build_config(*, load_with_bias: bool = True, profile: str = "full") -> Chime
             "original_max_position_embeddings": 8192,
         },
         qk_layernorm=True,
+        rms_norm_eps=1e-5,
         scoring_func="sigmoid",
         topk_method="noaux_tc",
         norm_topk_prob=True,

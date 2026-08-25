@@ -46,7 +46,7 @@ class ChimeraFlashAttentionKwargs(TypedDict, total=False):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class ChimeraRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+    def __init__(self, hidden_size, eps: float = 1e-5) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps

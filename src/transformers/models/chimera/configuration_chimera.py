@@ -45,7 +45,7 @@ class ChimeraConfig(PreTrainedConfig):
     max_position_embeddings: int = 8192
     original_max_position_embeddings: int = 8192
     initializer_range: float = 0.02
-    rms_norm_eps: float = 1e-6
+    rms_norm_eps: float = 1e-5
     use_cache: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0

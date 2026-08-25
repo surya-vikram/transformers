@@ -79,6 +79,7 @@ class ChimeraExpertsTest(unittest.TestCase):
         self.assertEqual(config.shared_expert_intermediate_size, 0)
         self.assertEqual(config.max_position_embeddings, 8192)
         self.assertEqual(config.original_max_position_embeddings, 8192)
+        self.assertEqual(config.rms_norm_eps, 1e-5)
         self.assertEqual(config.rope_parameters["factor"], 1.0)
         self.assertEqual(config.router_aux_loss_coef, 0.0)
         self.assertEqual(config.router_z_loss_coef, 0.001)
