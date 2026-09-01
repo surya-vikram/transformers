@@ -195,6 +195,38 @@ class ChimeraExpertsTest(unittest.TestCase):
         self.assertFalse(tokenizer.kwargs["add_special_tokens"])
         self.assertEqual(inputs["input_ids"].tolist(), [[4, 5]])
 
+    def test_chat_inference_uses_template_without_duplicate_special_tokens(self):
+        class RecordingTokenizer:
+            def apply_chat_template(self, messages, **kwargs):
+                self.messages = messages
+                self.template_kwargs = kwargs
+                return "<rendered-chat>"
+
+            def __call__(self, prompt, **kwargs):
+                self.prompt = prompt
+                self.tokenizer_kwargs = kwargs
+                return {"input_ids": torch.tensor([[2, 4, 5, 2]])}
+
+        tokenizer = RecordingTokenizer()
+        inputs = prepare_inputs(
+            tokenizer,
+            "Complete this request",
+            SimpleNamespace(chat=True, system_prompt="Be concise"),
+        )
+
+        self.assertEqual(
+            tokenizer.messages,
+            [
+                {"role": "system", "content": "Be concise"},
+                {"role": "user", "content": "Complete this request"},
+            ],
+        )
+        self.assertFalse(tokenizer.template_kwargs["tokenize"])
+        self.assertTrue(tokenizer.template_kwargs["add_generation_prompt"])
+        self.assertEqual(tokenizer.prompt, "<rendered-chat>")
+        self.assertFalse(tokenizer.tokenizer_kwargs["add_special_tokens"])
+        self.assertEqual(inputs["input_ids"].tolist(), [[2, 4, 5, 2]])
+
     def test_attention_qk_layernorm_checkpoint_keys(self):
         config = ChimeraConfig(
             hidden_size=8,
