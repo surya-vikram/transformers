@@ -147,6 +147,12 @@ def main() -> None:
     args = parse_args()
     tokenizer = load_tokenizer(args.model)
     config = AutoConfig.from_pretrained(args.model)
+    print(
+        f"context_phase={config.context_phase}; position_embedding_type={config.position_embedding_type}; "
+        f"max_position_embeddings={config.max_position_embeddings}; "
+        f"yarn_factor={config.rope_parameters['factor']}; "
+        f"yarn_original={config.original_max_position_embeddings}"
+    )
     if args.load_with_bias is not None:
         config.load_with_bias = args.load_with_bias == "true"
     load_with_bias = getattr(config, "load_with_bias", True)

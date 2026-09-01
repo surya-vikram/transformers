@@ -15,10 +15,14 @@
 import unittest
 from copy import deepcopy
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 import torch
 
 from transformers import ChimeraConfig, ChimeraForCausalLM
+from transformers.models.chimera.configuration_chimera import CHIMERA_CONTEXT_PHASES
+from transformers.models.chimera.scripts.export_to_hf import build_config
+from transformers.models.chimera.scripts.infer import prepare_inputs
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -27,6 +31,7 @@ if is_torch_available():
     from transformers.models.chimera.modeling_chimera import (
         ChimeraAttention,
         ChimeraExperts,
+        ChimeraRotaryEmbedding,
         ChimeraSparseMoeBlock,
         ChimeraTopkRouter,
     )
@@ -79,8 +84,11 @@ class ChimeraExpertsTest(unittest.TestCase):
         self.assertEqual(config.shared_expert_intermediate_size, 0)
         self.assertEqual(config.max_position_embeddings, 8192)
         self.assertEqual(config.original_max_position_embeddings, 8192)
+        self.assertEqual(config.context_phase, "8k")
+        self.assertEqual(config.position_embedding_type, "yarn")
         self.assertEqual(config.rms_norm_eps, 1e-5)
         self.assertEqual(config.rope_parameters["factor"], 1.0)
+        self.assertFalse(config.rope_parameters["truncate"])
         self.assertEqual(config.router_aux_loss_coef, 0.0)
         self.assertEqual(config.router_z_loss_coef, 0.001)
         self.assertEqual(config.router_bias_update_rate, 0.0)
@@ -90,6 +98,102 @@ class ChimeraExpertsTest(unittest.TestCase):
         self.assertEqual(config.routed_scaling_factor, 2.5)
         self.assertTrue(config.load_with_bias)
         self.assertTrue(config.qk_layernorm)
+
+    def test_all_context_phase_configs_round_trip(self):
+        for phase, geometry in CHIMERA_CONTEXT_PHASES.items():
+            with self.subTest(phase=phase), TemporaryDirectory() as tmpdir:
+                config = build_config(profile="tiny", context_phase=phase)
+                config.save_pretrained(tmpdir)
+                reloaded = ChimeraConfig.from_pretrained(tmpdir)
+
+                self.assertEqual(reloaded.context_phase, phase)
+                self.assertEqual(reloaded.position_embedding_type, "yarn")
+                self.assertEqual(reloaded.max_position_embeddings, geometry["max_position_embeddings"])
+                self.assertEqual(reloaded.original_max_position_embeddings, 8192)
+                self.assertEqual(reloaded.rope_parameters["rope_type"], "yarn")
+                self.assertEqual(reloaded.rope_parameters["factor"], geometry["factor"])
+                self.assertFalse(reloaded.rope_parameters["truncate"])
+
+    def test_context_phase_rejects_non_yarn_and_mismatched_geometry(self):
+        with self.assertRaisesRegex(ValueError, "only position_embedding_type='yarn'"):
+            ChimeraConfig(position_embedding_type="none")
+        with self.assertRaisesRegex(ValueError, "requires factor=4.0"):
+            ChimeraConfig(
+                context_phase="32k",
+                max_position_embeddings=32768,
+                rope_scaling={"type": "yarn", "factor": 1.0},
+            )
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            ChimeraConfig(context_phase="8k", max_position_embeddings=32768)
+
+    def test_all_context_phases_forward_and_cache(self):
+        input_ids = torch.tensor([[4, 5, 6, 7]])
+        for phase, geometry in CHIMERA_CONTEXT_PHASES.items():
+            with self.subTest(phase=phase):
+                config = ChimeraConfig(
+                    vocab_size=32,
+                    hidden_size=8,
+                    intermediate_size=16,
+                    moe_intermediate_size=12,
+                    num_hidden_layers=1,
+                    num_attention_heads=2,
+                    num_key_value_heads=1,
+                    head_dim=4,
+                    first_k_dense_replace=1,
+                    n_routed_experts=4,
+                    num_experts_per_tok=2,
+                    context_phase=phase,
+                    max_position_embeddings=geometry["max_position_embeddings"],
+                    eos_token_id=None,
+                )
+                model = ChimeraForCausalLM(config).eval()
+                outputs = model(input_ids, use_cache=True)
+                self.assertEqual(outputs.past_key_values.get_seq_length(), 4)
+                next_outputs = model(
+                    torch.tensor([[8]]),
+                    past_key_values=outputs.past_key_values,
+                    use_cache=True,
+                )
+                generated = model.generate(input_ids, max_new_tokens=2, do_sample=False)
+
+                self.assertEqual(outputs.logits.shape, (1, 4, config.vocab_size))
+                self.assertEqual(next_outputs.past_key_values.get_seq_length(), 5)
+                self.assertEqual(next_outputs.logits.shape, (1, 1, config.vocab_size))
+                self.assertTrue(torch.isfinite(next_outputs.logits).all())
+                self.assertEqual(generated.shape, (1, 6))
+
+    def test_all_context_phases_rotary_boundary_values_are_finite(self):
+        for phase, geometry in CHIMERA_CONTEXT_PHASES.items():
+            with self.subTest(phase=phase):
+                config = build_config(profile="tiny", context_phase=phase)
+                rotary = ChimeraRotaryEmbedding(config)
+                positions = torch.tensor(
+                    [[0, 8191, geometry["max_position_embeddings"] - 1]]
+                )
+                cos, sin = rotary(torch.zeros(1, 3, config.hidden_size), positions)
+
+                self.assertEqual(cos.shape, (1, 3, config.head_dim))
+                self.assertEqual(sin.shape, cos.shape)
+                self.assertTrue(torch.isfinite(cos).all())
+                self.assertTrue(torch.isfinite(sin).all())
+
+    def test_raw_inference_does_not_insert_special_tokens(self):
+        class RecordingTokenizer:
+            def __call__(self, prompt, **kwargs):
+                self.prompt = prompt
+                self.kwargs = kwargs
+                return {"input_ids": torch.tensor([[4, 5]])}
+
+        tokenizer = RecordingTokenizer()
+        inputs = prepare_inputs(
+            tokenizer,
+            "The capital of France is",
+            SimpleNamespace(chat=False, system_prompt=None),
+        )
+
+        self.assertEqual(tokenizer.prompt, "The capital of France is")
+        self.assertFalse(tokenizer.kwargs["add_special_tokens"])
+        self.assertEqual(inputs["input_ids"].tolist(), [[4, 5]])
 
     def test_attention_qk_layernorm_checkpoint_keys(self):
         config = ChimeraConfig(

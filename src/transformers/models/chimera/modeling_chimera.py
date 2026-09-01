@@ -81,7 +81,7 @@ class ChimeraRotaryEmbedding(nn.Module):
         super().__init__()
         self.config = config
         self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
+        self.original_max_seq_len = config.original_max_position_embeddings
         self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":

@@ -19,6 +19,15 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
 
+CHIMERA_CONTEXT_PHASES = {
+    "8k": {"max_position_embeddings": 8192, "factor": 1.0},
+    "32k": {"max_position_embeddings": 32768, "factor": 4.0},
+    "64k": {"max_position_embeddings": 65536, "factor": 8.0},
+    "128k": {"max_position_embeddings": 131072, "factor": 16.0},
+}
+CHIMERA_YARN_ORIGINAL_MAX_POSITION_EMBEDDINGS = 8192
+
+
 @strict
 class ChimeraConfig(PreTrainedConfig):
     r"""
@@ -42,6 +51,8 @@ class ChimeraConfig(PreTrainedConfig):
     num_key_value_heads: int | None = 2
     head_dim: int = 256
     hidden_act: str = "silu"
+    context_phase: str | None = None
+    position_embedding_type: str = "yarn"
     max_position_embeddings: int = 8192
     original_max_position_embeddings: int = 8192
     initializer_range: float = 0.02
@@ -83,22 +94,7 @@ class ChimeraConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
-        if self.rope_parameters is None:
-            rope_scaling = self.rope_scaling or {
-                "type": "yarn",
-                "factor": 1.0,
-                "beta_fast": 32.0,
-                "beta_slow": 1.0,
-                "mscale": 1.0,
-                "mscale_all_dim": 0.0,
-                "original_max_position_embeddings": self.original_max_position_embeddings,
-            }
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", "default"))
-            self.rope_parameters = {
-                "rope_type": rope_type,
-                "rope_theta": self.rope_theta,
-                **{k: v for k, v in rope_scaling.items() if k != "type"},
-            }
+        self._validate_and_normalize_yarn()
 
         if self.num_attention_heads % self.num_key_value_heads != 0:
             raise ValueError("num_attention_heads must be divisible by num_key_value_heads.")
@@ -124,6 +120,80 @@ class ChimeraConfig(PreTrainedConfig):
             raise ValueError("moe_qb_ema_decay must be greater than or equal to 0 and less than 1.")
 
         super().__post_init__(**kwargs)
+
+    def _validate_and_normalize_yarn(self) -> None:
+        if self.position_embedding_type != "yarn":
+            raise ValueError("Chimera supports only position_embedding_type='yarn'.")
+        if self.original_max_position_embeddings != CHIMERA_YARN_ORIGINAL_MAX_POSITION_EMBEDDINGS:
+            raise ValueError(
+                "Chimera requires original_max_position_embeddings=8192 across every context phase."
+            )
+        if self.rope_theta != 10_000_000.0:
+            raise ValueError("Chimera requires rope_theta=10000000.0.")
+        if self.rms_norm_eps != 1e-5:
+            raise ValueError("Chimera requires rms_norm_eps=1e-5.")
+
+        matching_phase = next(
+            (
+                phase
+                for phase, geometry in CHIMERA_CONTEXT_PHASES.items()
+                if self.max_position_embeddings == geometry["max_position_embeddings"]
+            ),
+            None,
+        )
+        if matching_phase is None:
+            raise ValueError(
+                "Chimera max_position_embeddings must be one of "
+                f"{[geometry['max_position_embeddings'] for geometry in CHIMERA_CONTEXT_PHASES.values()]}."
+            )
+        if self.context_phase is not None and self.context_phase != matching_phase:
+            raise ValueError(
+                f"context_phase={self.context_phase!r} does not match "
+                f"max_position_embeddings={self.max_position_embeddings}."
+            )
+        self.context_phase = matching_phase
+
+        supplied_parameters = []
+        for source in (self.rope_scaling, self.rope_parameters):
+            if source is None:
+                continue
+            normalized = dict(source)
+            rope_type = normalized.pop("type", normalized.get("rope_type", "yarn"))
+            normalized["rope_type"] = rope_type
+            supplied_parameters.append(normalized)
+
+        if len(supplied_parameters) == 2:
+            first, second = supplied_parameters
+            for key in first.keys() & second.keys():
+                if first[key] != second[key]:
+                    raise ValueError(
+                        f"rope_scaling and rope_parameters disagree for {key!r}: "
+                        f"{first[key]!r} != {second[key]!r}."
+                    )
+
+        yarn_parameters = supplied_parameters[-1] if supplied_parameters else {}
+        expected = {
+            "rope_type": "yarn",
+            "rope_theta": self.rope_theta,
+            "factor": CHIMERA_CONTEXT_PHASES[matching_phase]["factor"],
+            "beta_fast": 32.0,
+            "beta_slow": 1.0,
+            "mscale": 1.0,
+            "mscale_all_dim": 0.0,
+            "original_max_position_embeddings": CHIMERA_YARN_ORIGINAL_MAX_POSITION_EMBEDDINGS,
+            # Megatron uses yarn_correction_range_round_to_int=False.
+            "truncate": False,
+        }
+        for key, value in expected.items():
+            actual = yarn_parameters.setdefault(key, value)
+            if actual != value:
+                raise ValueError(f"Chimera YaRN requires {key}={value!r}, found {actual!r}.")
+
+        self.rope_parameters = yarn_parameters
+        self.rope_scaling = {
+            "type": "yarn",
+            **{key: value for key, value in yarn_parameters.items() if key not in {"rope_type", "rope_theta"}},
+        }
 
 
 __all__ = ["ChimeraConfig"]

@@ -15,6 +15,7 @@ from importlib import resources
 from pathlib import Path
 
 from transformers import ChimeraConfig, ChimeraForCausalLM, GenerationConfig, PreTrainedTokenizerFast
+from transformers.models.chimera.configuration_chimera import CHIMERA_CONTEXT_PHASES
 
 
 TOKENIZER_FILES = ("training_report.json",)
@@ -81,6 +82,12 @@ def parse_args() -> argparse.Namespace:
         default="full",
         help="Export the full canonical architecture or its reduced canonical smoke-test profile.",
     )
+    parser.add_argument(
+        "--context-phase",
+        choices=tuple(CHIMERA_CONTEXT_PHASES),
+        default="8k",
+        help="Canonical YaRN context phase represented by the exported configuration.",
+    )
     parser.add_argument("--dtype", default="bfloat16", choices=("float32", "float16", "bfloat16"))
     parser.add_argument("--max-shard-size", default="5GB", help="Shard size used when --random-init saves weights.")
     return parser.parse_args()
@@ -143,7 +150,9 @@ def update_json_file(path: Path, updates: dict) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 
 
-def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTokenizerFast:
+def copy_tokenizer_artifacts(
+    tokenizer_root: Path, output: Path, model_max_length: int
+) -> PreTrainedTokenizerFast:
     for name in TOKENIZER_FILES:
         src = tokenizer_root / name
         if src.exists():
@@ -175,7 +184,7 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
     tokenizer.eos_token = "<EOS>"
     tokenizer.pad_token = "<EOS>"
     tokenizer.chat_template = CHIMERA_CHAT_TEMPLATE
-    tokenizer.model_max_length = 8192
+    tokenizer.model_max_length = model_max_length
 
     tokenizer.save_pretrained(output)
     (output / "chat_template.jinja").write_text(CHIMERA_CHAT_TEMPLATE + "\n", encoding="utf-8")
@@ -184,7 +193,7 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
         {
             "bos_token": "<BOS>",
             "eos_token": "<EOS>",
-            "model_max_length": 8192,
+            "model_max_length": model_max_length,
             "pad_token": "<EOS>",
             "additional_special_tokens": CHIMERA_ADDITIONAL_SPECIAL_TOKENS,
             "chat_template": CHIMERA_CHAT_TEMPLATE,
@@ -203,7 +212,9 @@ def copy_tokenizer_artifacts(tokenizer_root: Path, output: Path) -> PreTrainedTo
     return tokenizer
 
 
-def build_config(*, load_with_bias: bool = True, profile: str = "full") -> ChimeraConfig:
+def build_config(
+    *, load_with_bias: bool = True, profile: str = "full", context_phase: str = "8k"
+) -> ChimeraConfig:
     profile_fields = {
         "full": {
             "hidden_size": 2048,
@@ -230,6 +241,7 @@ def build_config(*, load_with_bias: bool = True, profile: str = "full") -> Chime
             "num_experts_per_tok": 2,
         },
     }[profile]
+    context_geometry = CHIMERA_CONTEXT_PHASES[context_phase]
     config = ChimeraConfig(
         vocab_size=50176,
         bos_token_id=0,
@@ -239,17 +251,20 @@ def build_config(*, load_with_bias: bool = True, profile: str = "full") -> Chime
         last_k_dense_replace=0,
         n_shared_experts=0,
         shared_expert_intermediate_size=0,
-        max_position_embeddings=8192,
+        context_phase=context_phase,
+        position_embedding_type="yarn",
+        max_position_embeddings=context_geometry["max_position_embeddings"],
         original_max_position_embeddings=8192,
         rope_theta=10000000.0,
         rope_scaling={
             "type": "yarn",
-            "factor": 1.0,
+            "factor": context_geometry["factor"],
             "beta_fast": 32.0,
             "beta_slow": 1.0,
             "mscale": 1.0,
             "mscale_all_dim": 0.0,
             "original_max_position_embeddings": 8192,
+            "truncate": False,
         },
         qk_layernorm=True,
         rms_norm_eps=1e-5,
@@ -337,7 +352,11 @@ def main() -> None:
     output = args.output
     output.mkdir(parents=True, exist_ok=True)
 
-    config = build_config(load_with_bias=args.load_with_bias, profile=args.profile)
+    config = build_config(
+        load_with_bias=args.load_with_bias,
+        profile=args.profile,
+        context_phase=args.context_phase,
+    )
     config.save_pretrained(output)
     write_generation_config(output)
     write_readme(output)
@@ -349,7 +368,9 @@ def main() -> None:
             tokenizer_root = extract_tokenizer_archive(args.tokenizer_archive, Path(tmpdir))
         else:
             tokenizer_root = bundled_tokenizer_root()
-        tokenizer = copy_tokenizer_artifacts(tokenizer_root, output)
+        tokenizer = copy_tokenizer_artifacts(
+            tokenizer_root, output, config.max_position_embeddings
+        )
 
     model_parameter_count = None
     if args.meta_init:
