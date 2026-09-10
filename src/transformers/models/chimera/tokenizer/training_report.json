@@ -1,13 +1,10 @@
 {
-  "step8_dir": "/data/output/step8_final",
-  "output_dir": "/data/output/step9_tokenizer",
-  "source_filter": null,
   "vocab_size": 50176,
   "special_tokens": [
     "<BOS>",
     "<EOS>",
-    "<start_of_turn>",
-    "<end_of_turn>",
+    "<DUMMY_0>",
+    "<DUMMY_1>",
     "<DUMMY_2>",
     "<DUMMY_3>",
     "<DUMMY_4>",
@@ -17,160 +14,333 @@
     "<DUMMY_8>",
     "<DUMMY_9>"
   ],
-  "dummy_token_count": 8,
-  "dummy_tokens": [
-    "<DUMMY_2>",
-    "<DUMMY_3>",
-    "<DUMMY_4>",
-    "<DUMMY_5>",
-    "<DUMMY_6>",
-    "<DUMMY_7>",
-    "<DUMMY_8>",
-    "<DUMMY_9>"
-  ],
-  "dummy_token_ids": {
-    "<DUMMY_2>": 4,
-    "<DUMMY_3>": 5,
-    "<DUMMY_4>": 6,
-    "<DUMMY_5>": 7,
-    "<DUMMY_6>": 8,
-    "<DUMMY_7>": 9,
-    "<DUMMY_8>": 10,
-    "<DUMMY_9>": 11
-  },
-  "tokenizer_training_cap": {
-    "mode": "min_token_and_char_caps",
-    "max_total_tokens": 25000000000,
-    "chars_per_token": 4.0,
-    "token_cap_derived_chars": 100000000000,
-    "max_total_chars_override": 25000000000,
-    "effective_max_total_chars": 25000000000
-  },
-  "doc_counts": {
-    "fineweb_edu": 705095124,
-    "military_data": 54365
-  },
-  "char_counts": {
-    "fineweb_edu": 3424227227982,
-    "military_data": 1424463750
-  },
-  "budget_summary": {
-    "mode": "production",
-    "domain_chars_available": 1424463750,
-    "general_chars_available": 3424227227982,
-    "target_total_chars": 25000000000,
-    "domain_fraction_requested": 0.05,
-    "domain_budget_chars": 1250000000,
-    "max_total_chars": 25000000000,
-    "budgets": {
-      "fineweb_edu": 23750000000,
-      "military_data": 1250000000
-    },
-    "cap_summary": {
-      "mode": "min_token_and_char_caps",
-      "max_total_tokens": 25000000000,
-      "chars_per_token": 4.0,
-      "token_cap_derived_chars": 100000000000,
-      "max_total_chars_override": 25000000000,
-      "effective_max_total_chars": 25000000000
-    }
-  },
-  "bos_id": 0,
-  "eos_id": 1,
-  "special_token_ids": {
-    "bos_token": 0,
-    "eos_token": 1,
-    "pad_token": 1,
-    "unk_token": null,
-    "chat_tokens": {
-      "<start_of_turn>": 2,
-      "<end_of_turn>": 3
-    },
-    "dummy_tokens": {
-      "<DUMMY_2>": 4,
-      "<DUMMY_3>": 5,
-      "<DUMMY_4>": 6,
-      "<DUMMY_5>": 7,
-      "<DUMMY_6>": 8,
-      "<DUMMY_7>": 9,
-      "<DUMMY_8>": 10,
-      "<DUMMY_9>": 11
-    }
-  },
-  "fertility_tokens_per_word": 1.3913530889085588,
-  "chars_per_token": 4.403317982898709,
-  "tokens_per_char": 0.227101472999163,
-  "unk_token_count": 0,
-  "tokenizer_diagnostics": {
-    "sample_config": {
-      "docs_per_source": 1000,
-      "max_chars_per_doc": 20000,
-      "seed": 42,
-      "sample_method": "deterministic_lowest_hash_per_source"
-    },
-    "special_token_ids": {
-      "bos_token": 0,
-      "eos_token": 1,
-      "pad_token": 1,
-      "unk_token": null,
-      "chat_tokens": {
-        "<start_of_turn>": 2,
-        "<end_of_turn>": 3
-      },
-      "dummy_tokens": {
-        "<DUMMY_2>": 4,
-        "<DUMMY_3>": 5,
-        "<DUMMY_4>": 6,
-        "<DUMMY_5>": 7,
-        "<DUMMY_6>": 8,
-        "<DUMMY_7>": 9,
-        "<DUMMY_8>": 10,
-        "<DUMMY_9>": 11
-      }
-    },
+  "training_characters": 50001695476,
+  "training_documents": 19237509,
+  "min_frequency": 2,
+  "rayon_threads": 220,
+  "training_seconds": 885.5761279463768,
+  "diagnostics": {
     "overall": {
-      "sampled_docs": 2000,
-      "sampled_chars": 14465996,
-      "sampled_words": 2361190,
-      "sampled_tokens": 3285249,
-      "unk_token_count": 0,
-      "fertility_tokens_per_word": 1.3913530889085588,
-      "chars_per_token": 4.403317982898709,
-      "tokens_per_char": 0.227101472999163
+      "documents": 3800,
+      "characters": 58594286,
+      "words": 9422377,
+      "tokens": 14414878,
+      "fertility_tokens_per_word": 1.5298557890434654,
+      "chars_per_token": 4.064847860661741
     },
-    "per_source": {
-      "fineweb_edu": {
-        "sampled_docs": 1000,
-        "sampled_chars": 4497004,
-        "sampled_words": 726857,
-        "sampled_tokens": 933042,
-        "unk_token_count": 0,
-        "fertility_tokens_per_word": 1.283666525877855,
-        "chars_per_token": 4.8197230135406555,
-        "tokens_per_char": 0.2074808027744694
+    "by_source": {
+      "SANGR": {
+        "documents": 100,
+        "characters": 294804,
+        "words": 50226,
+        "tokens": 67323,
+        "fertility_tokens_per_word": 1.3404013857364712,
+        "chars_per_token": 4.378949244686066
       },
-      "military_data": {
-        "sampled_docs": 1000,
-        "sampled_chars": 9968992,
-        "sampled_words": 1634333,
-        "sampled_tokens": 2352207,
-        "unk_token_count": 0,
-        "fertility_tokens_per_word": 1.4392458574843683,
-        "chars_per_token": 4.238144006883748,
-        "tokens_per_char": 0.2359523410190318
+      "arxiv_defense_papers": {
+        "documents": 100,
+        "characters": 5786553,
+        "words": 856274,
+        "tokens": 1495257,
+        "fertility_tokens_per_word": 1.7462366018353939,
+        "chars_per_token": 3.8699387463158508
+      },
+      "carnegie_india": {
+        "documents": 71,
+        "characters": 3054179,
+        "words": 453513,
+        "tokens": 624062,
+        "fertility_tokens_per_word": 1.3760619871977209,
+        "chars_per_token": 4.894031362268493
+      },
+      "climbmix_400b_shuffle": {
+        "documents": 100,
+        "characters": 266918,
+        "words": 44141,
+        "tokens": 57449,
+        "fertility_tokens_per_word": 1.301488412133844,
+        "chars_per_token": 4.646173127469582
+      },
+      "ddp_mod_military_reports": {
+        "documents": 100,
+        "characters": 4353144,
+        "words": 650489,
+        "tokens": 1151758,
+        "fertility_tokens_per_word": 1.7706033460980892,
+        "chars_per_token": 3.779564804412038
+      },
+      "finepdf_edu": {
+        "documents": 100,
+        "characters": 1353900,
+        "words": 202318,
+        "tokens": 327580,
+        "fertility_tokens_per_word": 1.6191342342253285,
+        "chars_per_token": 4.133036204896514
+      },
+      "finewebedu_deduped": {
+        "documents": 100,
+        "characters": 654783,
+        "words": 104912,
+        "tokens": 143535,
+        "fertility_tokens_per_word": 1.368146637181638,
+        "chars_per_token": 4.561835092486153
+      },
+      "finewiki_filtered_final": {
+        "documents": 100,
+        "characters": 254547,
+        "words": 41453,
+        "tokens": 64357,
+        "fertility_tokens_per_word": 1.552529370612501,
+        "chars_per_token": 3.9552340848703325
+      },
+      "gdelt_2023plus": {
+        "documents": 100,
+        "characters": 181026,
+        "words": 27427,
+        "tokens": 37981,
+        "fertility_tokens_per_word": 1.384803296022168,
+        "chars_per_token": 4.766225217872094
+      },
+      "gdelt_gold_edu3plus_cleaned": {
+        "documents": 100,
+        "characters": 752848,
+        "words": 119670,
+        "tokens": 151469,
+        "fertility_tokens_per_word": 1.2657224032756749,
+        "chars_per_token": 4.9703107566564775
+      },
+      "gdelt_low_edu0_1_cleaned": {
+        "documents": 100,
+        "characters": 346607,
+        "words": 53971,
+        "tokens": 75174,
+        "fertility_tokens_per_word": 1.3928591280502491,
+        "chars_per_token": 4.610729773591934
+      },
+      "gdelt_silver_edu2_cleaned": {
+        "documents": 100,
+        "characters": 435464,
+        "words": 67550,
+        "tokens": 86760,
+        "fertility_tokens_per_word": 1.284381939304219,
+        "chars_per_token": 5.019179345320424
+      },
+      "gutenberg_military_history": {
+        "documents": 29,
+        "characters": 25529874,
+        "words": 4292893,
+        "tokens": 6303544,
+        "fertility_tokens_per_word": 1.4683673690446046,
+        "chars_per_token": 4.0500826201895315
+      },
+      "high_quality_synthetic": {
+        "documents": 100,
+        "characters": 255564,
+        "words": 39035,
+        "tokens": 54310,
+        "fertility_tokens_per_word": 1.391315486102216,
+        "chars_per_token": 4.705652734303075
+      },
+      "idsa_documents": {
+        "documents": 100,
+        "characters": 750540,
+        "words": 109321,
+        "tokens": 172463,
+        "fertility_tokens_per_word": 1.5775834469132188,
+        "chars_per_token": 4.35188997060239
+      },
+      "military_clean_neon_cleaned_documents": {
+        "documents": 100,
+        "characters": 5294230,
+        "words": 906701,
+        "tokens": 1370308,
+        "fertility_tokens_per_word": 1.511311887821895,
+        "chars_per_token": 3.8635328699825147
+      },
+      "nemotron_4plus": {
+        "documents": 100,
+        "characters": 148504,
+        "words": 25638,
+        "tokens": 42391,
+        "fertility_tokens_per_word": 1.6534441064045557,
+        "chars_per_token": 3.5031964332051615
+      },
+      "nemotron_4plusmind": {
+        "documents": 100,
+        "characters": 276944,
+        "words": 46693,
+        "tokens": 71135,
+        "fertility_tokens_per_word": 1.5234617608635128,
+        "chars_per_token": 3.893217122372953
+      },
+      "nemotron_cc_v1.0_hq": {
+        "documents": 100,
+        "characters": 222780,
+        "words": 37226,
+        "tokens": 49351,
+        "fertility_tokens_per_word": 1.3257132111964756,
+        "chars_per_token": 4.5141942412514435
+      },
+      "nemotron_cc_v2_diverse_qa": {
+        "documents": 100,
+        "characters": 255691,
+        "words": 41612,
+        "tokens": 52011,
+        "fertility_tokens_per_word": 1.2499038738825339,
+        "chars_per_token": 4.916094672280864
+      },
+      "nemotron_cc_v2_hq": {
+        "documents": 100,
+        "characters": 404072,
+        "words": 64962,
+        "tokens": 86180,
+        "fertility_tokens_per_word": 1.3266217173116592,
+        "chars_per_token": 4.688698073799025
+      },
+      "nemotron_cc_v2_medium_high": {
+        "documents": 100,
+        "characters": 505632,
+        "words": 82003,
+        "tokens": 106944,
+        "fertility_tokens_per_word": 1.3041474092411254,
+        "chars_per_token": 4.728007181328546
+      },
+      "nemotron_code_v1_synthetic": {
+        "documents": 100,
+        "characters": 222081,
+        "words": 33717,
+        "tokens": 57008,
+        "fertility_tokens_per_word": 1.6907791321885102,
+        "chars_per_token": 3.895611142295818
+      },
+      "nemotron_spec_v1.2_fact_seeking": {
+        "documents": 100,
+        "characters": 31330,
+        "words": 5546,
+        "tokens": 8936,
+        "fertility_tokens_per_word": 1.6112513523260008,
+        "chars_per_token": 3.5060429722470903
+      },
+      "nemotron_spec_v1.2_generative": {
+        "documents": 100,
+        "characters": 311032,
+        "words": 53639,
+        "tokens": 94902,
+        "fertility_tokens_per_word": 1.7692723577993623,
+        "chars_per_token": 3.2774019514867967
+      },
+      "nemotron_spec_v1.2_multiple_choice": {
+        "documents": 100,
+        "characters": 70050,
+        "words": 9831,
+        "tokens": 14709,
+        "fertility_tokens_per_word": 1.4961855355508087,
+        "chars_per_token": 4.762390373240873
+      },
+      "nemotron_spec_v1_math_textbooks": {
+        "documents": 100,
+        "characters": 782612,
+        "words": 129532,
+        "tokens": 199267,
+        "fertility_tokens_per_word": 1.538361177160856,
+        "chars_per_token": 3.9274541193474084
+      },
+      "nemotron_spec_v1_scientific_coding": {
+        "documents": 100,
+        "characters": 551316,
+        "words": 72546,
+        "tokens": 134133,
+        "fertility_tokens_per_word": 1.8489372260358945,
+        "chars_per_token": 4.110218961776744
+      },
+      "nemotron_spec_v1_wiki_rewrite": {
+        "documents": 100,
+        "characters": 338392,
+        "words": 70280,
+        "tokens": 110629,
+        "fertility_tokens_per_word": 1.5741178144564598,
+        "chars_per_token": 3.0588001337804736
+      },
+      "openbmb_ultradatamath_L1": {
+        "documents": 100,
+        "characters": 662681,
+        "words": 106117,
+        "tokens": 157583,
+        "fertility_tokens_per_word": 1.4849929794472139,
+        "chars_per_token": 4.205282295679102
+      },
+      "openbmb_ultradatamath_L2_preview": {
+        "documents": 100,
+        "characters": 342159,
+        "words": 53581,
+        "tokens": 101391,
+        "fertility_tokens_per_word": 1.892293910154719,
+        "chars_per_token": 3.3746486374530282
+      },
+      "openbmb_ultradatamath_L3": {
+        "documents": 100,
+        "characters": 315721,
+        "words": 57420,
+        "tokens": 101748,
+        "fertility_tokens_per_word": 1.7719958202716823,
+        "chars_per_token": 3.1029700829500335
+      },
+      "pib_press_releases": {
+        "documents": 100,
+        "characters": 372978,
+        "words": 61107,
+        "tokens": 113999,
+        "fertility_tokens_per_word": 1.8655636833750635,
+        "chars_per_token": 3.2717655418029983
+      },
+      "prince_final_run_procurement_cpt": {
+        "documents": 100,
+        "characters": 482388,
+        "words": 70668,
+        "tokens": 105763,
+        "fertility_tokens_per_word": 1.4966179883398427,
+        "chars_per_token": 4.561027958737933
+      },
+      "prince_final_run_v2_cpt": {
+        "documents": 100,
+        "characters": 459429,
+        "words": 67212,
+        "tokens": 102927,
+        "fertility_tokens_per_word": 1.5313783252990538,
+        "chars_per_token": 4.463639278323472
+      },
+      "prince_neon_outputs_cpt": {
+        "documents": 100,
+        "characters": 150134,
+        "words": 23626,
+        "tokens": 35830,
+        "fertility_tokens_per_word": 1.5165495640396174,
+        "chars_per_token": 4.190175830309796
+      },
+      "reuters_investigations": {
+        "documents": 100,
+        "characters": 795268,
+        "words": 127157,
+        "tokens": 174175,
+        "fertility_tokens_per_word": 1.3697633634011497,
+        "chars_per_token": 4.56591359265107
+      },
+      "tokyotech_swallow_code_v2": {
+        "documents": 100,
+        "characters": 824680,
+        "words": 84427,
+        "tokens": 211524,
+        "fertility_tokens_per_word": 2.505407038032857,
+        "chars_per_token": 3.8987538057147177
+      },
+      "ultrafineweb_l1_en_hq": {
+        "documents": 100,
+        "characters": 503431,
+        "words": 77943,
+        "tokens": 99012,
+        "fertility_tokens_per_word": 1.2703129209807167,
+        "chars_per_token": 5.084545307639478
       }
     }
-  },
-  "timing_seconds": {
-    "stats_scan": 282.76780796051025,
-    "budget_allocation": 8.20159912109375e-05,
-    "training": 14425.398775577545,
-    "save_bundle": 0.04767560958862305,
-    "diagnostics": 1228.2042396068573,
-    "total": 15936.490160942078
-  },
-  "chat_token_ids": {
-    "<start_of_turn>": 2,
-    "<end_of_turn>": 3
   }
 }
